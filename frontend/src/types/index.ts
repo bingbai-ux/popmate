@@ -1,5 +1,5 @@
 // テンプレートタイプ
-export type TemplateType = 'price_pop' | 'a4_pop' | 'a5_pop' | 'a6_pop' | 'custom';
+export type TemplateType = 'price_pop' | 'a4_pop' | 'a5_pop' | 'a6_pop' | 'a4' | 'a5' | 'a6' | 'custom';
 
 // テンプレート
 export interface Template {

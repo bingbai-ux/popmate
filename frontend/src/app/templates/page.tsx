@@ -226,9 +226,61 @@ function CustomSizeCreator({ onSelect }: { onSelect: (width: number, height: num
   );
 }
 
+// フォールバックテンプレート（APIが失敗した場合に使用）
+const fallbackTemplates: Template[] = [
+  {
+    id: 'fallback-price-pop',
+    user_id: undefined,
+    name: 'プライスポップ（標準）',
+    type: 'price_pop',
+    width_mm: 65,
+    height_mm: 45,
+    design_data: { elements: [], background_color: '#FFFFFF' },
+    is_system: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'fallback-a4',
+    user_id: undefined,
+    name: 'A4ポップ',
+    type: 'a4',
+    width_mm: 210,
+    height_mm: 297,
+    design_data: { elements: [], background_color: '#FFFFFF' },
+    is_system: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'fallback-a5',
+    user_id: undefined,
+    name: 'A5ポップ',
+    type: 'a5',
+    width_mm: 148,
+    height_mm: 210,
+    design_data: { elements: [], background_color: '#FFFFFF' },
+    is_system: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'fallback-a6',
+    user_id: undefined,
+    name: 'A6ポップ',
+    type: 'a6',
+    width_mm: 105,
+    height_mm: 148,
+    design_data: { elements: [], background_color: '#FFFFFF' },
+    is_system: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
 export default function TemplatesPage() {
   const router = useRouter();
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templates, setTemplates] = useState<Template[]>(fallbackTemplates);
   const [userTemplates, setUserTemplates] = useState<Template[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
@@ -250,18 +302,24 @@ export default function TemplatesPage() {
     try {
       // システムテンプレートを取得
       const systemRes = await getSystemTemplates();
-      if (systemRes.success && systemRes.data) {
+      if (systemRes.success && systemRes.data && systemRes.data.length > 0) {
         setTemplates(systemRes.data);
       }
+      // APIが失敗してもフォールバックテンプレートが表示される
 
-      // ユーザーテンプレートを取得
-      const userRes = await getUserTemplates(userId);
-      if (userRes.success && userRes.data) {
-        setUserTemplates(userRes.data);
+      // ユーザーテンプレートを取得（オプショナル）
+      try {
+        const userRes = await getUserTemplates(userId);
+        if (userRes.success && userRes.data) {
+          setUserTemplates(userRes.data);
+        }
+      } catch (userErr) {
+        console.warn('User templates not loaded:', userErr);
       }
     } catch (err) {
       console.error('=== Load Templates Error ===', err);
-      setError('テンプレートの読み込みに失敗しました');
+      // フォールバックテンプレートがあるのでエラーメッセージは表示しない
+      // setError('テンプレートの読み込みに失敗しました');
     } finally {
       setLoading(false);
     }
