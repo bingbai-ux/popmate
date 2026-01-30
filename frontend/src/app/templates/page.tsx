@@ -3,54 +3,71 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import type { Template } from '@/types';
 import { getSystemTemplates, getUserTemplates } from '@/lib/api';
-import StatusBar from '@/components/common/StatusBar';
 import TemplatePreviewModal from '@/components/templates/TemplatePreviewModal';
 
 // テンプレートタイプのラベルとアイコン
-const templateTypeInfo: Record<string, { label: string; icon: string; description: string }> = {
+const templateTypeInfo: Record<string, { label: string; icon: string; description: string; color: string }> = {
   price_pop: { 
     label: 'プライスポップ', 
     icon: '🏷️',
-    description: '商品の価格表示に最適な小型ポップ'
+    description: '商品の価格表示に最適な小型ポップ',
+    color: 'from-amber-500 to-orange-500'
   },
   a4_pop: { 
     label: 'A4ポップ', 
     icon: '📄',
-    description: 'A4サイズ（210×297mm）の大型ポップ'
+    description: 'A4サイズ（210×297mm）の大型ポップ',
+    color: 'from-blue-500 to-indigo-500'
   },
   a4: { 
     label: 'A4ポップ', 
     icon: '📄',
-    description: 'A4サイズ（210×297mm）の大型ポップ'
+    description: 'A4サイズ（210×297mm）の大型ポップ',
+    color: 'from-blue-500 to-indigo-500'
   },
   a5_pop: { 
     label: 'A5ポップ', 
     icon: '📋',
-    description: 'A5サイズ（148×210mm）の中型ポップ'
+    description: 'A5サイズ（148×210mm）の中型ポップ',
+    color: 'from-emerald-500 to-teal-500'
   },
   a5: { 
     label: 'A5ポップ', 
     icon: '📋',
-    description: 'A5サイズ（148×210mm）の中型ポップ'
+    description: 'A5サイズ（148×210mm）の中型ポップ',
+    color: 'from-emerald-500 to-teal-500'
   },
   a6_pop: { 
     label: 'A6ポップ', 
     icon: '🗒️',
-    description: 'A6サイズ（105×148mm）の小型ポップ'
+    description: 'A6サイズ（105×148mm）の小型ポップ',
+    color: 'from-purple-500 to-pink-500'
   },
   a6: { 
     label: 'A6ポップ', 
     icon: '🗒️',
-    description: 'A6サイズ（105×148mm）の小型ポップ'
+    description: 'A6サイズ（105×148mm）の小型ポップ',
+    color: 'from-purple-500 to-pink-500'
   },
   custom: { 
     label: 'カスタム', 
     icon: '✨',
-    description: 'サイズを自由に設定できるオリジナルポップ'
+    description: 'サイズを自由に設定できるオリジナルポップ',
+    color: 'from-gray-500 to-gray-600'
   },
 };
+
+// ステップの定義
+const steps = [
+  { id: 1, label: 'テンプレート', active: true },
+  { id: 2, label: 'デザイン', active: false },
+  { id: 3, label: 'データ選択', active: false },
+  { id: 4, label: 'プレビュー', active: false },
+  { id: 5, label: '印刷', active: false },
+];
 
 // テンプレートのプレビューコンポーネント
 function TemplateCard({ template, isSelected, onClick, onPreview }: {
@@ -62,66 +79,63 @@ function TemplateCard({ template, isSelected, onClick, onPreview }: {
   const info = templateTypeInfo[template.type] || templateTypeInfo.custom;
   
   // プレビューのスケール計算
-  const maxWidth = 100;
-  const maxHeight = 130;
+  const maxWidth = 80;
+  const maxHeight = 100;
   const scale = Math.min(maxWidth / template.width_mm, maxHeight / template.height_mm);
   const previewWidth = template.width_mm * scale;
   const previewHeight = template.height_mm * scale;
 
   return (
     <div
+      onClick={onClick}
       className={`
-        relative p-3 rounded-lg cursor-pointer transition-all duration-200 group
+        relative bg-white rounded-xl overflow-hidden cursor-pointer transition-all duration-300 group
         ${isSelected 
-          ? 'bg-primary/10 border-2 border-primary shadow-md' 
-          : 'bg-white border-2 border-transparent hover:border-gray-200 hover:shadow-md'
+          ? 'ring-2 ring-blue-500 shadow-lg scale-[1.02]' 
+          : 'hover:shadow-lg hover:scale-[1.01] border border-gray-100'
         }
       `}
     >
-      {/* メインクリックエリア */}
-      <div onClick={onClick}>
-        {/* プレビュー */}
-        <div className="aspect-[3/4] bg-gray-100 rounded mb-2 flex items-center justify-center relative overflow-hidden">
-          <div
-            className="bg-white border border-gray-300 shadow-sm flex items-center justify-center"
-            style={{
-              width: `${previewWidth}px`,
-              height: `${previewHeight}px`,
-            }}
-          >
-            <span className="text-xl">{info.icon}</span>
-          </div>
-          
-          {/* ホバー時のプレビューボタン */}
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onPreview();
-              }}
-              className="px-3 py-1.5 bg-white text-gray-800 rounded text-sm font-medium hover:bg-gray-100 transition-colors"
-            >
-              プレビュー
-            </button>
-          </div>
+      {/* カードヘッダー */}
+      <div className={`bg-gradient-to-r ${info.color} p-3`}>
+        <div className="flex items-center justify-between">
+          <span className="text-2xl">{info.icon}</span>
+          <span className="text-white/90 text-xs font-medium px-2 py-0.5 bg-white/20 rounded-full">
+            {template.width_mm}×{template.height_mm}mm
+          </span>
         </div>
-        
-        {/* 情報 */}
-        <h3 className="font-medium text-sm mb-0.5 truncate">{template.name}</h3>
-        <p className="text-xs text-gray-500 mb-0.5">{info.label}</p>
-        <p className="text-xs text-gray-400">
-          {template.width_mm}×{template.height_mm}mm
-        </p>
+      </div>
+      
+      {/* プレビューエリア */}
+      <div className="p-4 bg-gray-50 flex items-center justify-center min-h-[100px]">
+        <div
+          className="bg-white border-2 border-dashed border-gray-300 rounded flex items-center justify-center shadow-sm"
+          style={{
+            width: `${previewWidth}px`,
+            height: `${previewHeight}px`,
+          }}
+        >
+          <span className="text-gray-400 text-[10px]">{template.width_mm}×{template.height_mm}</span>
+        </div>
+      </div>
+      
+      {/* 情報エリア */}
+      <div className="p-3 border-t border-gray-100">
+        <h3 className="font-semibold text-gray-800 text-sm mb-0.5 truncate">{template.name}</h3>
+        <p className="text-xs text-gray-500">{info.label}</p>
       </div>
       
       {/* 選択インジケーター */}
       {isSelected && (
-        <div className="absolute top-2 right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
+        <div className="absolute top-2 right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center shadow-md">
           <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
           </svg>
         </div>
       )}
+      
+      {/* ホバー時のオーバーレイ */}
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors pointer-events-none" />
     </div>
   );
 }
@@ -133,28 +147,28 @@ function CustomSizeCreator({ onSelect }: { onSelect: (width: number, height: num
 
   // プリセットサイズ
   const presets = [
-    { name: '名刺サイズ', width: 91, height: 55 },
-    { name: 'カードサイズ', width: 85.6, height: 54 },
-    { name: 'はがきサイズ', width: 100, height: 148 },
-    { name: 'A7', width: 74, height: 105 },
+    { name: '名刺サイズ', width: 91, height: 55, icon: '💳' },
+    { name: 'カードサイズ', width: 85.6, height: 54, icon: '🎴' },
+    { name: 'はがきサイズ', width: 100, height: 148, icon: '📮' },
+    { name: 'A7', width: 74, height: 105, icon: '📝' },
   ];
 
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+    <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+      <div className="flex items-center gap-4 mb-6">
+        <div className="w-14 h-14 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
           <span className="text-2xl">✨</span>
         </div>
         <div>
-          <h3 className="font-bold text-lg">カスタムサイズで作成</h3>
+          <h3 className="font-bold text-lg text-gray-800">カスタムサイズで作成</h3>
           <p className="text-sm text-gray-500">サイズを自由に設定できます</p>
         </div>
       </div>
 
       {/* プリセット */}
       <div className="mb-6">
-        <p className="text-sm font-medium text-gray-600 mb-2">プリセットサイズ</p>
-        <div className="flex flex-wrap gap-2">
+        <p className="text-sm font-medium text-gray-600 mb-3">プリセットサイズ</p>
+        <div className="grid grid-cols-2 gap-2">
           {presets.map((preset) => (
             <button
               key={preset.name}
@@ -162,63 +176,68 @@ function CustomSizeCreator({ onSelect }: { onSelect: (width: number, height: num
                 setWidth(preset.width);
                 setHeight(preset.height);
               }}
-              className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-sm transition-colors"
+              className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-sm transition-colors border border-gray-100 hover:border-blue-200"
             >
-              {preset.name}
+              <span>{preset.icon}</span>
+              <span>{preset.name}</span>
             </button>
           ))}
         </div>
       </div>
       
       {/* サイズ入力 */}
-      <div className="space-y-4 mb-6">
-        <div className="flex gap-4 items-center">
-          <label className="text-sm text-gray-600 w-16">幅</label>
-          <input
-            type="number"
-            value={width}
-            onChange={(e) => setWidth(Number(e.target.value))}
-            min={10}
-            max={297}
-            step={0.1}
-            className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-          <span className="text-sm text-gray-500 w-8">mm</span>
+      <div className="space-y-3 mb-6">
+        <div className="flex gap-3 items-center">
+          <label className="text-sm font-medium text-gray-600 w-12">幅</label>
+          <div className="flex-1 relative">
+            <input
+              type="number"
+              value={width}
+              onChange={(e) => setWidth(Number(e.target.value))}
+              min={10}
+              max={297}
+              step={0.1}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">mm</span>
+          </div>
         </div>
-        <div className="flex gap-4 items-center">
-          <label className="text-sm text-gray-600 w-16">高さ</label>
-          <input
-            type="number"
-            value={height}
-            onChange={(e) => setHeight(Number(e.target.value))}
-            min={10}
-            max={420}
-            step={0.1}
-            className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-          <span className="text-sm text-gray-500 w-8">mm</span>
+        <div className="flex gap-3 items-center">
+          <label className="text-sm font-medium text-gray-600 w-12">高さ</label>
+          <div className="flex-1 relative">
+            <input
+              type="number"
+              value={height}
+              onChange={(e) => setHeight(Number(e.target.value))}
+              min={10}
+              max={420}
+              step={0.1}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">mm</span>
+          </div>
         </div>
       </div>
 
       {/* プレビュー */}
-      <div className="mb-6 p-4 bg-gray-100 rounded-lg">
-        <p className="text-xs text-gray-500 mb-2 text-center">プレビュー</p>
+      <div className="mb-6 p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl">
+        <p className="text-xs text-gray-500 mb-3 text-center font-medium">プレビュー</p>
         <div className="flex justify-center">
           <div
-            className="bg-white border border-gray-300 shadow-sm flex items-center justify-center"
+            className="bg-white border-2 border-dashed border-gray-300 rounded-lg shadow-sm flex items-center justify-center"
             style={{
-              width: `${Math.min(width * 1.5, 150)}px`,
-              height: `${Math.min(height * 1.5, 200)}px`,
+              width: `${Math.min(width * 1.2, 120)}px`,
+              height: `${Math.min(height * 1.2, 160)}px`,
             }}
           >
-            <span className="text-gray-400 text-xs">{width}×{height}mm</span>
+            <span className="text-gray-400 text-xs font-medium">{width}×{height}mm</span>
           </div>
         </div>
       </div>
 
       <button
         onClick={() => onSelect(width, height)}
-        className="w-full py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors"
+        className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl font-medium hover:from-blue-700 hover:to-blue-600 transition-all shadow-md hover:shadow-lg"
       >
         このサイズで作成 →
       </button>
@@ -285,7 +304,6 @@ export default function TemplatesPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<'system' | 'user' | 'custom'>('system');
 
   // 仮のユーザーID
@@ -297,7 +315,6 @@ export default function TemplatesPage() {
 
   const loadTemplates = async () => {
     setLoading(true);
-    setError(null);
 
     try {
       // システムテンプレートを取得
@@ -305,7 +322,6 @@ export default function TemplatesPage() {
       if (systemRes.success && systemRes.data && systemRes.data.length > 0) {
         setTemplates(systemRes.data);
       }
-      // APIが失敗してもフォールバックテンプレートが表示される
 
       // ユーザーテンプレートを取得（オプショナル）
       try {
@@ -318,8 +334,7 @@ export default function TemplatesPage() {
       }
     } catch (err) {
       console.error('=== Load Templates Error ===', err);
-      // フォールバックテンプレートがあるのでエラーメッセージは表示しない
-      // setError('テンプレートの読み込みに失敗しました');
+      // フォールバックテンプレートを使用
     } finally {
       setLoading(false);
     }
@@ -329,20 +344,14 @@ export default function TemplatesPage() {
     setSelectedTemplate(template);
   };
 
-  const handleProceed = () => {
+  const handleCreateWithTemplate = () => {
     if (selectedTemplate) {
-      router.push(`/editor?template=${selectedTemplate.id}`);
+      router.push(`/editor?template=${selectedTemplate.id}&width=${selectedTemplate.width_mm}&height=${selectedTemplate.height_mm}&type=${selectedTemplate.type}`);
     }
   };
 
-  const handleCustomCreate = (width: number, height: number) => {
-    router.push(`/editor?new=true&width=${width}&height=${height}`);
-  };
-
-  const handlePreviewSelect = () => {
-    if (previewTemplate) {
-      router.push(`/editor?template=${previewTemplate.id}`);
-    }
+  const handleCreateCustom = (width: number, height: number) => {
+    router.push(`/editor?width=${width}&height=${height}&type=custom`);
   };
 
   // テンプレートをタイプ別にグループ化
@@ -356,91 +365,125 @@ export default function TemplatesPage() {
   }, {} as Record<string, Template[]>);
 
   // タイプの表示順序
-  const typeOrder = ['price_pop', 'a4_pop', 'a4', 'a5_pop', 'a5', 'a6_pop', 'a6', 'custom'];
+  const typeOrder = ['price_pop', 'a4', 'a4_pop', 'a5', 'a5_pop', 'a6', 'a6_pop', 'custom'];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* ヘッダー */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-gradient-to-r from-blue-600 to-blue-700 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
-              <span className="text-white font-bold">P</span>
-            </div>
-            <span className="font-bold text-gray-800">ポップメイト</span>
+          <Link href="/" className="flex items-center gap-3">
+            <Image 
+              src="/popmate_icon_blue.png" 
+              alt="PopMate" 
+              width={36} 
+              height={36}
+              className="bg-white rounded-lg p-0.5"
+            />
+            <h1 className="text-lg font-bold text-white">ポップメイト</h1>
           </Link>
-          <nav className="flex gap-4">
-            <Link href="/" className="text-gray-600 hover:text-primary transition-colors">
-              ホーム
-            </Link>
-          </nav>
+          <Link 
+            href="/" 
+            className="text-white/80 hover:text-white transition-colors flex items-center gap-1 text-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            ホーム
+          </Link>
         </div>
       </header>
 
       {/* ステータスバー */}
-      <StatusBar
-        currentStep="template"
-        onStepClick={() => {}}
-        completedSteps={[]}
-      />
+      <div className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-center gap-2">
+            {steps.map((step, index) => (
+              <div key={step.id} className="flex items-center">
+                <div className={`
+                  flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all
+                  ${step.active 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'bg-gray-100 text-gray-500'
+                  }
+                `}>
+                  <span className={`
+                    w-5 h-5 rounded-full flex items-center justify-center text-xs
+                    ${step.active ? 'bg-white/20' : 'bg-gray-200'}
+                  `}>
+                    {step.id}
+                  </span>
+                  <span className="hidden sm:inline">{step.label}</span>
+                </div>
+                {index < steps.length - 1 && (
+                  <div className="w-8 h-0.5 bg-gray-200 mx-1" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* メインコンテンツ */}
-      <main className="flex-1 max-w-7xl mx-auto px-4 py-6 w-full">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">テンプレートを選択</h1>
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        {/* タイトル */}
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">テンプレートを選択</h2>
           <p className="text-gray-600">作成したいポップのテンプレートを選んでください</p>
         </div>
 
         {/* カテゴリタブ */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+        <div className="flex justify-center gap-2 mb-8">
           <button
             onClick={() => setActiveCategory('system')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
-              activeCategory === 'system'
-                ? 'bg-primary text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`
+              px-5 py-2.5 rounded-full font-medium text-sm transition-all
+              ${activeCategory === 'system'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+              }
+            `}
           >
             既存テンプレート
           </button>
           <button
             onClick={() => setActiveCategory('user')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
-              activeCategory === 'user'
-                ? 'bg-primary text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`
+              px-5 py-2.5 rounded-full font-medium text-sm transition-all
+              ${activeCategory === 'user'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+              }
+            `}
           >
             オリジナルデータ
             {userTemplates.length > 0 && (
-              <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs">
+              <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full text-xs">
                 {userTemplates.length}
               </span>
             )}
           </button>
           <button
             onClick={() => setActiveCategory('custom')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
-              activeCategory === 'custom'
-                ? 'bg-primary text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`
+              px-5 py-2.5 rounded-full font-medium text-sm transition-all
+              ${activeCategory === 'custom'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+              }
+            `}
           >
             新規作成
           </button>
         </div>
 
-        {/* エラー表示 */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
-
         {/* ローディング */}
         {loading && (
-          <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <div className="flex justify-center py-16">
+            <div className="flex flex-col items-center gap-3">
+              <div className="animate-spin rounded-full h-10 w-10 border-3 border-blue-600 border-t-transparent"></div>
+              <span className="text-gray-500 text-sm">読み込み中...</span>
+            </div>
           </div>
         )}
 
@@ -452,14 +495,15 @@ export default function TemplatesPage() {
               if (!typeTemplates || typeTemplates.length === 0) return null;
               
               const info = templateTypeInfo[type] || templateTypeInfo.custom;
+              
               return (
-                <section key={type}>
+                <div key={type}>
                   <div className="flex items-center gap-2 mb-4">
                     <span className="text-xl">{info.icon}</span>
-                    <h2 className="text-lg font-bold">{info.label}</h2>
-                    <span className="text-sm text-gray-500 hidden sm:inline">- {info.description}</span>
+                    <h3 className="font-bold text-gray-800">{info.label}</h3>
+                    <span className="text-sm text-gray-500">- {info.description}</span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                     {typeTemplates.map((template) => (
                       <TemplateCard
                         key={template.id}
@@ -470,36 +514,35 @@ export default function TemplatesPage() {
                       />
                     ))}
                   </div>
-                </section>
+                </div>
               );
             })}
-
-            {templates.length === 0 && (
-              <div className="text-center py-12 text-gray-500">
-                テンプレートがありません
-              </div>
-            )}
           </div>
         )}
 
-        {/* ユーザーテンプレート（オリジナルデータ） */}
+        {/* ユーザーテンプレート */}
         {!loading && activeCategory === 'user' && (
           <div>
             {userTemplates.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-xl">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">📁</span>
+              <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-100">
+                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
                 </div>
-                <p className="text-gray-500 mb-4">オリジナルデータがありません</p>
+                <h3 className="text-lg font-medium text-gray-800 mb-2">オリジナルデータがありません</h3>
+                <p className="text-gray-500 mb-6">
+                  カスタムサイズで作成したテンプレートがここに表示されます
+                </p>
                 <button
                   onClick={() => setActiveCategory('custom')}
-                  className="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors"
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-xl font-medium hover:from-blue-700 hover:to-blue-600 transition-all shadow-md"
                 >
                   新規作成する
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {userTemplates.map((template) => (
                   <TemplateCard
                     key={template.id}
@@ -516,29 +559,22 @@ export default function TemplatesPage() {
 
         {/* カスタムサイズ作成 */}
         {!loading && activeCategory === 'custom' && (
-          <div className="max-w-md">
-            <CustomSizeCreator onSelect={handleCustomCreate} />
+          <div className="max-w-md mx-auto">
+            <CustomSizeCreator onSelect={handleCreateCustom} />
           </div>
-        )}
-
-        {/* 選択時の下部スペーサー */}
-        {selectedTemplate && activeCategory !== 'custom' && (
-          <div className="h-24" />
         )}
       </main>
 
-      {/* 選択時のフローティングボタン */}
-      {selectedTemplate && activeCategory !== 'custom' && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 z-40">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
+      {/* 選択時のフッターバー */}
+      {selectedTemplate && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
+          <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-xl">
-                  {templateTypeInfo[selectedTemplate.type]?.icon || '📄'}
-                </span>
+              <div className={`w-12 h-12 bg-gradient-to-r ${templateTypeInfo[selectedTemplate.type]?.color || 'from-gray-500 to-gray-600'} rounded-xl flex items-center justify-center shadow-md`}>
+                <span className="text-xl">{templateTypeInfo[selectedTemplate.type]?.icon || '📄'}</span>
               </div>
               <div>
-                <h3 className="font-medium">{selectedTemplate.name}</h3>
+                <p className="font-semibold text-gray-800">{selectedTemplate.name}</p>
                 <p className="text-sm text-gray-500">
                   {selectedTemplate.width_mm}×{selectedTemplate.height_mm}mm
                 </p>
@@ -547,21 +583,21 @@ export default function TemplatesPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setPreviewTemplate(selectedTemplate)}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors hidden sm:block"
+                className="px-5 py-2.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-medium"
               >
                 プレビュー
               </button>
               <button
                 onClick={() => setSelectedTemplate(null)}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                className="px-5 py-2.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-medium"
               >
                 キャンセル
               </button>
               <button
-                onClick={handleProceed}
-                className="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors"
+                onClick={handleCreateWithTemplate}
+                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-lg font-medium hover:from-blue-700 hover:to-blue-600 transition-all shadow-md"
               >
-                作成 →
+                作成する →
               </button>
             </div>
           </div>
@@ -573,7 +609,10 @@ export default function TemplatesPage() {
         <TemplatePreviewModal
           template={previewTemplate}
           onClose={() => setPreviewTemplate(null)}
-          onSelect={handlePreviewSelect}
+          onSelect={() => {
+            setSelectedTemplate(previewTemplate);
+            setPreviewTemplate(null);
+          }}
         />
       )}
     </div>
