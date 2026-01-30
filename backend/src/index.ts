@@ -14,10 +14,28 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// 許可するオリジンのリスト
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'https://popmate.vercel.app',
+  'https://popmate-git-main-bingbai-uxs-projects.vercel.app',
+  'http://localhost:3000',
+].filter(Boolean);
+
 // ミドルウェア設定
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    // オリジンがない場合（サーバー間リクエストなど）は許可
+    if (!origin) {
+      return callback(null, true);
+    }
+    // Vercelのプレビューデプロイメントも許可
+    if (allowedOrigins.includes(origin) || origin.includes('vercel.app')) {
+      return callback(null, true);
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(morgan('combined'));
@@ -67,6 +85,7 @@ app.listen(PORT, () => {
   console.log('=== PopMate Backend Server ===');
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Allowed origins: ${allowedOrigins.join(', ')}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
 });
 
