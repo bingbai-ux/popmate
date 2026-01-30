@@ -20,12 +20,27 @@ const templateTypeInfo: Record<string, { label: string; icon: string; descriptio
     icon: '📄',
     description: 'A4サイズ（210×297mm）の大型ポップ'
   },
+  a4: { 
+    label: 'A4ポップ', 
+    icon: '📄',
+    description: 'A4サイズ（210×297mm）の大型ポップ'
+  },
   a5_pop: { 
     label: 'A5ポップ', 
     icon: '📋',
     description: 'A5サイズ（148×210mm）の中型ポップ'
   },
+  a5: { 
+    label: 'A5ポップ', 
+    icon: '📋',
+    description: 'A5サイズ（148×210mm）の中型ポップ'
+  },
   a6_pop: { 
+    label: 'A6ポップ', 
+    icon: '🗒️',
+    description: 'A6サイズ（105×148mm）の小型ポップ'
+  },
+  a6: { 
     label: 'A6ポップ', 
     icon: '🗒️',
     description: 'A6サイズ（105×148mm）の小型ポップ'
@@ -283,7 +298,7 @@ export default function TemplatesPage() {
   }, {} as Record<string, Template[]>);
 
   // タイプの表示順序
-  const typeOrder = ['price_pop', 'a4_pop', 'a5_pop', 'a6_pop', 'custom'];
+  const typeOrder = ['price_pop', 'a4_pop', 'a4', 'a5_pop', 'a5', 'a6_pop', 'a6', 'custom'];
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
