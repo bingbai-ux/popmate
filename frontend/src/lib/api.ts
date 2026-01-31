@@ -4,7 +4,8 @@ import { Product, Category, ProductSearchParams, ApiResponse, MOCK_PRODUCTS, MOC
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://popmate-production.up.railway.app';
 
-// 開発時はtrue、本番接続時はfalse
+// デフォルトはfalse（スマレジ実データを使用）
+// NEXT_PUBLIC_USE_MOCK=true の場合のみモックデータを使用
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
 
 // モックデータモードを取得（グローバル状態から）
