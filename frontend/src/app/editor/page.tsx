@@ -184,9 +184,9 @@ function EditorContent() {
   };
 
   return (
-    <>
+    <div className="flex flex-col h-full overflow-hidden">
       {/* サブヘッダー */}
-      <div className="bg-white border-b border-border px-4 py-2 flex items-center justify-between">
+      <div className="flex-shrink-0 bg-white border-b border-border px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link
             href="/templates"
@@ -210,7 +210,8 @@ function EditorContent() {
       </div>
 
       {/* ツールバー */}
-      <EditorToolbar
+      <div className="flex-shrink-0">
+        <EditorToolbar
         onAddText={handleAddText}
         onAddImage={handleAddImage}
         onAddShape={handleAddShape}
@@ -219,11 +220,12 @@ function EditorContent() {
         onAddQRCode={handleAddQRCode}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
-        zoom={zoom}
-      />
+          zoom={zoom}
+        />
+      </div>
 
       {/* メインエリア */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* キャンバス */}
         <EditorCanvas
           template={template}
@@ -235,7 +237,7 @@ function EditorContent() {
         />
 
         {/* プロパティパネル */}
-        <div className="w-72 border-l border-border bg-white overflow-y-auto">
+        <div className="w-72 flex-shrink-0 border-l border-border bg-white overflow-y-auto">
           <PropertyPanel
             element={selectedElement}
             onUpdate={handleUpdateElement}
@@ -243,18 +245,22 @@ function EditorContent() {
           />
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
 export default function EditorPage() {
   return (
-    <main className="min-h-screen bg-background-light flex flex-col">
-      <Header />
-      <ProgressBar currentStep={2} />
-      <Suspense fallback={<div className="flex-1 flex items-center justify-center">読み込み中...</div>}>
-        <EditorContent />
-      </Suspense>
+    <main className="h-screen flex flex-col overflow-hidden">
+      <div className="flex-shrink-0">
+        <Header />
+        <ProgressBar currentStep={2} />
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center">読み込み中...</div>}>
+          <EditorContent />
+        </Suspense>
+      </div>
     </main>
   );
 }

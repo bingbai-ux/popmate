@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { TextElement as TextElementType } from '@/types/editor';
 
 interface TextElementProps {
@@ -11,6 +11,8 @@ interface TextElementProps {
   onUpdate: (updates: Partial<TextElementType>) => void;
 }
 
+type ResizeDirection = 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
+
 export default function TextElement({
   element,
   isSelected,
@@ -20,11 +22,16 @@ export default function TextElement({
 }: TextElementProps) {
   const elementRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeDirection, setResizeDirection] = useState<ResizeDirection | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0, posX: 0, posY: 0 });
 
   // mm → px 変換 (96dpi基準: 1mm ≒ 3.78px)
-  const mmToPx = (mm: number) => mm * 3.78 * scale;
+  const mmToPx = useCallback((mm: number) => mm * 3.78 * scale, [scale]);
+  const pxToMm = useCallback((px: number) => px / (3.78 * scale), [scale]);
 
+  // ドラッグ開始
   const handleMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
     onSelect();
@@ -35,6 +42,23 @@ export default function TextElement({
     });
   };
 
+  // リサイズ開始
+  const handleResizeStart = (e: React.MouseEvent, direction: ResizeDirection) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsResizing(true);
+    setResizeDirection(direction);
+    setResizeStart({
+      x: e.clientX,
+      y: e.clientY,
+      width: element.size.width,
+      height: element.size.height,
+      posX: element.position.x,
+      posY: element.position.y,
+    });
+  };
+
+  // ドラッグ処理
   useEffect(() => {
     if (!isDragging) return;
 
@@ -62,34 +86,171 @@ export default function TextElement({
     };
   }, [isDragging, dragStart, scale, onUpdate]);
 
+  // リサイズ処理
+  useEffect(() => {
+    if (!isResizing || !resizeDirection) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = pxToMm(e.clientX - resizeStart.x);
+      const deltaY = pxToMm(e.clientY - resizeStart.y);
+
+      let newWidth = resizeStart.width;
+      let newHeight = resizeStart.height;
+      let newPosX = resizeStart.posX;
+      let newPosY = resizeStart.posY;
+
+      // 方向に応じてサイズと位置を計算
+      switch (resizeDirection) {
+        case 'se': // 右下
+          newWidth = Math.max(5, resizeStart.width + deltaX);
+          newHeight = Math.max(5, resizeStart.height + deltaY);
+          break;
+        case 'sw': // 左下
+          newWidth = Math.max(5, resizeStart.width - deltaX);
+          newHeight = Math.max(5, resizeStart.height + deltaY);
+          newPosX = resizeStart.posX + (resizeStart.width - newWidth);
+          break;
+        case 'ne': // 右上
+          newWidth = Math.max(5, resizeStart.width + deltaX);
+          newHeight = Math.max(5, resizeStart.height - deltaY);
+          newPosY = resizeStart.posY + (resizeStart.height - newHeight);
+          break;
+        case 'nw': // 左上
+          newWidth = Math.max(5, resizeStart.width - deltaX);
+          newHeight = Math.max(5, resizeStart.height - deltaY);
+          newPosX = resizeStart.posX + (resizeStart.width - newWidth);
+          newPosY = resizeStart.posY + (resizeStart.height - newHeight);
+          break;
+        case 'e': // 右
+          newWidth = Math.max(5, resizeStart.width + deltaX);
+          break;
+        case 'w': // 左
+          newWidth = Math.max(5, resizeStart.width - deltaX);
+          newPosX = resizeStart.posX + (resizeStart.width - newWidth);
+          break;
+        case 's': // 下
+          newHeight = Math.max(5, resizeStart.height + deltaY);
+          break;
+        case 'n': // 上
+          newHeight = Math.max(5, resizeStart.height - deltaY);
+          newPosY = resizeStart.posY + (resizeStart.height - newHeight);
+          break;
+      }
+
+      onUpdate({
+        size: {
+          width: Math.round(newWidth * 10) / 10,
+          height: Math.round(newHeight * 10) / 10,
+        },
+        position: {
+          x: Math.round(newPosX * 10) / 10,
+          y: Math.round(newPosY * 10) / 10,
+        },
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      setResizeDirection(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, resizeDirection, resizeStart, pxToMm, onUpdate]);
+
+  // テキストスタイルの計算
+  const textStyle: React.CSSProperties = {
+    fontFamily: element.style.fontFamily,
+    fontSize: element.style.fontSize * scale,
+    fontWeight: element.style.fontWeight,
+    fontStyle: element.style.fontStyle,
+    textDecoration: element.style.textDecoration,
+    color: element.style.color,
+    textAlign: element.style.textAlign,
+    letterSpacing: element.style.letterSpacing * scale,
+    lineHeight: `${element.style.lineHeight}%`,
+    opacity: element.style.opacity / 100,
+    writingMode: element.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+    transform: element.style.textWidth !== 100 ? `scaleX(${element.style.textWidth / 100})` : undefined,
+    transformOrigin: 'left top',
+    whiteSpace: element.style.autoWrap ? 'pre-wrap' : 'nowrap',
+    overflow: 'hidden',
+  };
+
+  // 垂直配置のスタイル
+  const containerStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: element.style.verticalAlign === 'top' ? 'flex-start' 
+      : element.style.verticalAlign === 'bottom' ? 'flex-end' 
+      : 'center',
+    height: '100%',
+  };
+
   return (
     <div
       ref={elementRef}
-      className={`absolute cursor-move ${isSelected ? 'ring-2 ring-primary' : ''}`}
+      className={`absolute ${isSelected ? 'ring-2 ring-primary' : ''}`}
       style={{
         left: mmToPx(element.position.x),
         top: mmToPx(element.position.y),
         width: mmToPx(element.size.width),
-        minHeight: mmToPx(element.size.height),
-        fontFamily: element.style.fontFamily,
-        fontSize: element.style.fontSize * scale,
-        fontWeight: element.style.fontWeight,
-        color: element.style.color,
-        textAlign: element.style.textAlign,
+        height: mmToPx(element.size.height),
         zIndex: element.zIndex,
+        cursor: isDragging ? 'grabbing' : 'grab',
         userSelect: 'none',
       }}
       onMouseDown={handleMouseDown}
     >
-      {element.content || 'テキストを入力'}
+      <div style={containerStyle}>
+        <div style={textStyle}>
+          {element.content || 'テキストを入力'}
+        </div>
+      </div>
       
       {/* 選択時のリサイズハンドル */}
       {isSelected && (
         <>
-          <div className="absolute -top-1 -left-1 w-2 h-2 bg-primary rounded-full" />
-          <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
-          <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-primary rounded-full" />
-          <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-primary rounded-full cursor-se-resize" />
+          {/* 四隅のハンドル */}
+          <div 
+            className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-primary rounded-full cursor-nw-resize hover:bg-primary/80 z-10"
+            onMouseDown={(e) => handleResizeStart(e, 'nw')}
+          />
+          <div 
+            className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-primary rounded-full cursor-ne-resize hover:bg-primary/80 z-10"
+            onMouseDown={(e) => handleResizeStart(e, 'ne')}
+          />
+          <div 
+            className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-primary rounded-full cursor-sw-resize hover:bg-primary/80 z-10"
+            onMouseDown={(e) => handleResizeStart(e, 'sw')}
+          />
+          <div 
+            className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-primary rounded-full cursor-se-resize hover:bg-primary/80 z-10"
+            onMouseDown={(e) => handleResizeStart(e, 'se')}
+          />
+          
+          {/* 辺の中央のハンドル */}
+          <div 
+            className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-primary rounded-full cursor-n-resize hover:bg-primary/80 z-10"
+            onMouseDown={(e) => handleResizeStart(e, 'n')}
+          />
+          <div 
+            className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-primary rounded-full cursor-s-resize hover:bg-primary/80 z-10"
+            onMouseDown={(e) => handleResizeStart(e, 's')}
+          />
+          <div 
+            className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3 h-3 bg-primary rounded-full cursor-w-resize hover:bg-primary/80 z-10"
+            onMouseDown={(e) => handleResizeStart(e, 'w')}
+          />
+          <div 
+            className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3 h-3 bg-primary rounded-full cursor-e-resize hover:bg-primary/80 z-10"
+            onMouseDown={(e) => handleResizeStart(e, 'e')}
+          />
         </>
       )}
     </div>
