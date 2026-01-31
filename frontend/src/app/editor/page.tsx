@@ -24,7 +24,7 @@ import {
   DEFAULT_QRCODE_SETTINGS,
 } from '@/types/editor';
 import { getTemplateById } from '@/types/template';
-import { saveEditorState, loadEditorState, EditorElement as StorageElement } from '@/lib/editorStorage';
+import { saveEditorState, loadEditorState } from '@/lib/editorStorage';
 import type { RoundingMethod } from '@/lib/api';
 
 function EditorContent() {
@@ -99,7 +99,7 @@ function EditorContent() {
   useEffect(() => {
     const savedState = loadEditorState(templateId);
     if (savedState) {
-      const restoredElements = savedState.elements as unknown as EditorElement[];
+      const restoredElements = savedState.elements;
       setElements(restoredElements);
       setZoom(savedState.zoom);
       setRoundingMethod(savedState.roundingMethod);
@@ -120,7 +120,7 @@ function EditorContent() {
     if (!isInitialized) return;
     
     saveEditorState({
-      elements: elements as unknown as StorageElement[],
+      elements,
       templateId,
       zoom,
       roundingMethod,

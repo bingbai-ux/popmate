@@ -2,37 +2,19 @@
 // エディター状態の保存・復元（sessionStorage使用）
 
 import type { RoundingMethod } from './api';
-
-// エディター要素の型定義
-export interface EditorElement {
-  id: string;
-  type: 'text' | 'image' | 'shape';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation?: number;
-  content?: string;
-  fontSize?: number;
-  fontFamily?: string;
-  fontWeight?: string;
-  color?: string;
-  textAlign?: 'left' | 'center' | 'right';
-  src?: string;
-  backgroundColor?: string;
-  borderColor?: string;
-  borderWidth?: number;
-  borderRadius?: number;
-}
+import type { EditorElement as EditorElementType } from '@/types/editor';
 
 // エディター状態の型定義
 export interface EditorState {
-  elements: EditorElement[];
+  elements: EditorElementType[];
   templateId: string;
   zoom: number;
   updatedAt: number;
   roundingMethod: RoundingMethod;
 }
+
+// 後方互換性のためにEditorElementをエクスポート
+export type EditorElement = EditorElementType;
 
 const STORAGE_KEY = 'popmate_editor_state';
 

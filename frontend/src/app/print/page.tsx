@@ -51,7 +51,7 @@ function PrintContent() {
     // editorStorageからテンプレート要素を取得
     const savedEditorState = loadEditorState(templateId);
     if (savedEditorState && savedEditorState.elements.length > 0) {
-      setElements(savedEditorState.elements as unknown as EditorElement[]);
+      setElements(savedEditorState.elements);
       console.log('[print] エディター状態を読み込みました:', savedEditorState.elements.length, '要素');
     }
 
