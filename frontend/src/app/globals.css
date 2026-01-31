@@ -29,6 +29,171 @@ body {
   color: var(--color-text-dark);
 }
 
+/* レスポンシブユーティリティ */
+.container-responsive {
+  width: 100%;
+  max-width: 100%;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container-responsive {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-responsive {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+/* モバイルでのスクロール改善 */
+.scroll-smooth {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* タッチデバイス用のタップハイライト無効化 */
+.no-tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* モバイルでのフォントサイズ調整 */
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+  
+  .text-responsive-sm {
+    font-size: 0.75rem;
+  }
+  
+  .text-responsive-base {
+    font-size: 0.875rem;
+  }
+  
+  .text-responsive-lg {
+    font-size: 1rem;
+  }
+  
+  .text-responsive-xl {
+    font-size: 1.125rem;
+  }
+  
+  .text-responsive-2xl {
+    font-size: 1.25rem;
+  }
+}
+
+/* モバイルでのボタンサイズ調整 */
+@media (max-width: 640px) {
+  .btn-responsive {
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* モバイルでのテーブルスクロール */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* モバイルでのモーダル調整 */
+@media (max-width: 640px) {
+  .modal-responsive {
+    margin: 0.5rem;
+    max-height: calc(100vh - 1rem);
+  }
+}
+
+/* モバイルでのサイドバー */
+@media (max-width: 1024px) {
+  .sidebar-responsive {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    max-height: 50vh;
+    overflow-y: auto;
+    border-radius: 1rem 1rem 0 0;
+    box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+}
+
+/* エディターのモバイル対応 */
+@media (max-width: 1024px) {
+  .editor-canvas-responsive {
+    max-width: 100%;
+    overflow: auto;
+  }
+  
+  .editor-toolbar-responsive {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  
+  .editor-toolbar-responsive button {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+  }
+}
+
+/* ローディングスピナー */
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* スケルトンローディング */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* トースト通知 */
+.toast {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  animation: toast-in 0.3s ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
 
 /* 印刷用スタイル */
 @media print {
@@ -49,5 +214,9 @@ body {
 
   .break-inside-avoid {
     break-inside: avoid;
+  }
+  
+  .no-print {
+    display: none !important;
   }
 }

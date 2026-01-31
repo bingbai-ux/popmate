@@ -1,28 +1,97 @@
-// APIクライアント
+// APIクライアント（実API対応版）
 
 import { Product, Category, ProductSearchParams, ApiResponse, MOCK_PRODUCTS, MOCK_CATEGORIES } from '@/types/product';
+import { getAuthHeaders, refreshToken } from './auth';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://popmate-production.up.railway.app';
 
-// 開発モードフラグ（スマレジ認証前はモックデータを使用）
-const USE_MOCK = true;
+// モックデータモードを取得（グローバル状態から）
+let useMockData = true;
 
-type ApiHeaders = Record<string, string>;
+export function setUseMockData(value: boolean) {
+  useMockData = value;
+}
 
-function getHeaders(): ApiHeaders {
-  const headers: ApiHeaders = {
-    'Content-Type': 'application/json',
+export function getUseMockData(): boolean {
+  return useMockData;
+}
+
+/**
+ * スマレジAPIレスポンスをProduct型にマッピング
+ */
+function transformSmaregiProduct(item: Record<string, unknown>): Product {
+  return {
+    productId: String(item.productId || item.product_id || ''),
+    productCode: String(item.productCode || item.product_code || ''),
+    productName: String(item.productName || item.product_name || ''),
+    price: Number(item.price || item.sellingPrice || item.selling_price || 0),
+    categoryId: String(item.categoryId || item.category_id || ''),
+    categoryName: String(item.categoryName || item.category_name || ''),
+    groupCode: String(item.groupCode || item.group_code || ''),
+    description: String(item.description || ''),
+    tag: String(item.tag || item.supplierProductNo || item.supplier_product_no || ''),
   };
-  
-  // スマレジ認証情報（ローカルストレージから取得）
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('smaregi_token');
-    const contractId = localStorage.getItem('smaregi_contract_id');
-    if (token) headers['x-smaregi-token'] = token;
-    if (contractId) headers['x-smaregi-contract-id'] = contractId;
+}
+
+/**
+ * スマレジAPIレスポンスをCategory型にマッピング
+ */
+function transformSmaregiCategory(item: Record<string, unknown>): Category {
+  return {
+    categoryId: String(item.categoryId || item.category_id || ''),
+    categoryCode: String(item.categoryCode || item.category_code || ''),
+    categoryName: String(item.categoryName || item.category_name || ''),
+    level: Number(item.level || 1),
+    parentCategoryId: item.parentCategoryId || item.parent_category_id 
+      ? String(item.parentCategoryId || item.parent_category_id) 
+      : undefined,
+  };
+}
+
+/**
+ * APIリクエストをリトライ付きで実行
+ */
+async function fetchWithRetry<T>(
+  url: string,
+  options: RequestInit = {},
+  maxRetries = 3
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          ...getAuthHeaders(),
+          ...(options.headers || {}),
+        },
+      });
+
+      // 401エラーの場合はトークンをリフレッシュして再試行
+      if (response.status === 401 && attempt < maxRetries) {
+        const refreshed = await refreshToken();
+        if (refreshed) {
+          continue;
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      if (attempt < maxRetries) {
+        // エクスポネンシャルバックオフ
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+      }
+    }
   }
-  
-  return headers;
+
+  throw lastError || new Error('API request failed');
 }
 
 /**
@@ -30,7 +99,7 @@ function getHeaders(): ApiHeaders {
  */
 export async function fetchProducts(params: ProductSearchParams = {}): Promise<Product[]> {
   // モックモードの場合
-  if (USE_MOCK) {
+  if (useMockData) {
     console.log('=== Using mock products ===', params);
     let products = [...MOCK_PRODUCTS];
     
@@ -58,24 +127,18 @@ export async function fetchProducts(params: ProductSearchParams = {}): Promise<P
     if (params.keyword) queryParams.append('keyword', params.keyword);
     if (params.categoryId) queryParams.append('category_id', params.categoryId);
     if (params.page) queryParams.append('page', params.page.toString());
-    if (params.limit) queryParams.append('limit', params.limit.toString());
+    if (params.limit) queryParams.append('limit', (params.limit || 100).toString());
 
-    const response = await fetch(
-      `${API_BASE_URL}/api/smaregi/products?${queryParams.toString()}`,
-      { headers: getHeaders() }
+    const result = await fetchWithRetry<ApiResponse<Record<string, unknown>[]>>(
+      `${API_BASE_URL}/api/smaregi/products?${queryParams.toString()}`
     );
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const result: ApiResponse<Product[]> = await response.json();
     
     if (!result.success) {
       throw new Error(result.error || 'Failed to fetch products');
     }
 
-    return result.data;
+    // スマレジAPIレスポンスをProduct型にマッピング
+    return result.data.map(transformSmaregiProduct);
   } catch (error) {
     console.error('=== Error fetching products ===', error);
     throw error;
@@ -83,35 +146,91 @@ export async function fetchProducts(params: ProductSearchParams = {}): Promise<P
 }
 
 /**
+ * 商品一覧を全件取得（ページネーション対応）
+ */
+export async function fetchAllProducts(params: Omit<ProductSearchParams, 'page' | 'limit'> = {}): Promise<Product[]> {
+  // モックモードの場合
+  if (useMockData) {
+    return fetchProducts(params);
+  }
+
+  // 本番APIコール（ページネーション）
+  const allProducts: Product[] = [];
+  let page = 1;
+  const limit = 100;
+  let hasMore = true;
+
+  while (hasMore) {
+    const products = await fetchProducts({ ...params, page, limit });
+    allProducts.push(...products);
+    
+    // 取得件数がlimit未満なら終了
+    if (products.length < limit) {
+      hasMore = false;
+    } else {
+      page++;
+    }
+
+    // 安全のため最大10ページまで
+    if (page > 10) {
+      console.warn('Reached maximum page limit (10)');
+      break;
+    }
+  }
+
+  return allProducts;
+}
+
+/**
  * カテゴリ一覧を取得
  */
 export async function fetchCategories(): Promise<Category[]> {
   // モックモードの場合
-  if (USE_MOCK) {
+  if (useMockData) {
     console.log('=== Using mock categories ===');
     return MOCK_CATEGORIES;
   }
 
   // 本番APIコール
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/smaregi/categories`,
-      { headers: getHeaders() }
+    const result = await fetchWithRetry<ApiResponse<Record<string, unknown>[]>>(
+      `${API_BASE_URL}/api/smaregi/categories`
     );
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const result: ApiResponse<Category[]> = await response.json();
     
     if (!result.success) {
       throw new Error(result.error || 'Failed to fetch categories');
     }
 
-    return result.data;
+    // スマレジAPIレスポンスをCategory型にマッピング
+    return result.data.map(transformSmaregiCategory);
   } catch (error) {
     console.error('=== Error fetching categories ===', error);
     throw error;
+  }
+}
+
+/**
+ * 商品詳細を取得
+ */
+export async function fetchProductById(productId: string): Promise<Product | null> {
+  // モックモードの場合
+  if (useMockData) {
+    return MOCK_PRODUCTS.find(p => p.productId === productId) || null;
+  }
+
+  // 本番APIコール
+  try {
+    const result = await fetchWithRetry<ApiResponse<Record<string, unknown>>>(
+      `${API_BASE_URL}/api/smaregi/products/${productId}`
+    );
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to fetch product');
+    }
+
+    return transformSmaregiProduct(result.data);
+  } catch (error) {
+    console.error('=== Error fetching product ===', error);
+    return null;
   }
 }
