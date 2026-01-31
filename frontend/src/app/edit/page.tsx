@@ -6,7 +6,6 @@ import Link from 'next/link';
 import Header from '@/components/Header';
 import ProgressBar from '@/components/ProgressBar';
 import PreviewCanvas from '@/components/edit/PreviewCanvas';
-import TaxSettings from '@/components/edit/TaxSettings';
 import ProductEditTable from '@/components/edit/ProductEditTable';
 import PrintPreviewModal from '@/components/edit/PrintPreviewModal';
 import { Product } from '@/types/product';
@@ -208,32 +207,21 @@ function EditContent() {
         </div>
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* 上部: プレビュー + 税設定 */}
-          <div className="flex gap-6 p-6 border-b border-border bg-white/50">
-            {/* プレビュー */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-sm text-text-dark">プレビュー</h3>
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <span>←→ 商品テーブルの行をクリックで切替</span>
-                </div>
+          {/* 上部: プレビュー */}
+          <div className="p-6 border-b border-border bg-white/50">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-sm text-text-dark">プレビュー</h3>
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>←→ 商品テーブルの行をクリックで切替</span>
               </div>
-              <PreviewCanvas
-                template={template}
-                elements={elements}
-                product={selectedProduct}
-                taxSettings={taxSettings}
-                zoom={1.5}
-              />
             </div>
-
-            {/* 税設定 */}
-            <div className="w-64 flex-shrink-0">
-              <TaxSettings
-                settings={taxSettings}
-                onChange={setTaxSettings}
-              />
-            </div>
+            <PreviewCanvas
+              template={template}
+              elements={elements}
+              product={selectedProduct}
+              taxSettings={taxSettings}
+              zoom={1.5}
+            />
           </div>
 
           {/* 下部: 商品テーブル */}

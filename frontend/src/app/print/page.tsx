@@ -13,6 +13,8 @@ import {
   DEFAULT_TAX_SETTINGS,
 } from '@/types/editor';
 import { getTemplateById } from '@/types/template';
+import { loadSelectedProducts } from '@/lib/selectedProductsStorage';
+import { loadEditorState } from '@/lib/editorStorage';
 
 function PrintContent() {
   const searchParams = useSearchParams();
@@ -32,52 +34,43 @@ function PrintContent() {
   const [taxSettings, setTaxSettings] = useState<TaxSettings>(DEFAULT_TAX_SETTINGS);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isPrinting, setIsPrinting] = useState(false);
 
   const currentProduct = products[currentIndex] || null;
 
   // 初期データ読み込み
   useEffect(() => {
-    // sessionStorageから商品データを取得
-    const savedProducts = sessionStorage.getItem('selectedProducts');
-    if (savedProducts) {
-      try {
-        setProducts(JSON.parse(savedProducts));
-      } catch (e) {
-        console.error('Failed to parse selectedProducts', e);
-      }
+    // selectedProductsStorageから商品データを取得（正しいキーを使用）
+    const savedProducts = loadSelectedProducts(templateId);
+    if (savedProducts && savedProducts.length > 0) {
+      setProducts(savedProducts);
+      console.log('[print] 選択商品を読み込みました:', savedProducts.length, '件');
+    } else {
+      console.log('[print] 選択商品が見つかりません');
     }
 
-    // sessionStorageからテンプレート要素を取得
-    const savedElements = sessionStorage.getItem('templateElements');
-    if (savedElements) {
-      try {
-        setElements(JSON.parse(savedElements));
-      } catch (e) {
-        console.error('Failed to parse templateElements', e);
-      }
+    // editorStorageからテンプレート要素を取得
+    const savedEditorState = loadEditorState(templateId);
+    if (savedEditorState && savedEditorState.elements.length > 0) {
+      setElements(savedEditorState.elements as unknown as EditorElement[]);
+      console.log('[print] エディター状態を読み込みました:', savedEditorState.elements.length, '要素');
     }
 
     // sessionStorageから税設定を取得
-    const savedTaxSettings = sessionStorage.getItem('taxSettings');
-    if (savedTaxSettings) {
-      try {
+    try {
+      const savedTaxSettings = sessionStorage.getItem('taxSettings');
+      if (savedTaxSettings) {
         setTaxSettings(JSON.parse(savedTaxSettings));
-      } catch (e) {
-        console.error('Failed to parse taxSettings', e);
       }
+    } catch (e) {
+      console.error('[print] 税設定の復元に失敗:', e);
     }
 
     setIsLoaded(true);
-  }, []);
+  }, [templateId]);
 
   // 印刷実行
   const handlePrint = () => {
-    setIsPrinting(true);
-    setTimeout(() => {
-      window.print();
-      setIsPrinting(false);
-    }, 100);
+    window.print();
   };
 
   // PDFダウンロード（html2canvasとjsPDFを使用）
