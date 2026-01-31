@@ -3,8 +3,8 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Header from '@/components/Header';
-import { handleAuthCallback } from '@/lib/auth';
 import { useAuth } from '@/contexts/AuthContext';
+import { setUseMockData } from '@/lib/api';
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -15,34 +15,53 @@ function AuthCallbackContent() {
 
   useEffect(() => {
     const processCallback = async () => {
-      const code = searchParams.get('code');
+      // エラーパラメータをチェック
       const error = searchParams.get('error');
-
       if (error) {
         setStatus('error');
-        setErrorMessage('認証がキャンセルされました');
+        setErrorMessage(decodeURIComponent(error));
         return;
       }
 
-      if (!code) {
-        setStatus('error');
-        setErrorMessage('認証コードが見つかりません');
-        return;
+      // バックエンドからリダイレクトされた場合（トークンが直接渡される）
+      const token = searchParams.get('token');
+      const contractId = searchParams.get('contractId');
+      const expiresIn = searchParams.get('expiresIn');
+
+      if (token && contractId) {
+        try {
+          // ローカルストレージに保存
+          localStorage.setItem('smaregi_token', token);
+          localStorage.setItem('smaregi_contract_id', contractId);
+          if (expiresIn) {
+            const expiresAt = Date.now() + parseInt(expiresIn, 10) * 1000;
+            localStorage.setItem('smaregi_token_expires_at', String(expiresAt));
+          }
+
+          // モックデータモードを無効化
+          setUseMockData(false);
+
+          // 認証状態を更新
+          await checkAuthStatus();
+
+          setStatus('success');
+
+          // 2秒後にホームへリダイレクト
+          setTimeout(() => {
+            router.push('/');
+          }, 2000);
+          return;
+        } catch (err) {
+          console.error('Callback processing error:', err);
+          setStatus('error');
+          setErrorMessage('認証処理中にエラーが発生しました');
+          return;
+        }
       }
 
-      const result = await handleAuthCallback(code);
-
-      if (result.success) {
-        setStatus('success');
-        await checkAuthStatus();
-        // 2秒後にメイン画面にリダイレクト
-        setTimeout(() => {
-          router.push('/');
-        }, 2000);
-      } else {
-        setStatus('error');
-        setErrorMessage(result.error || '認証に失敗しました');
-      }
+      // 認証コードがない場合
+      setStatus('error');
+      setErrorMessage('認証情報が見つかりません');
     };
 
     processCallback();

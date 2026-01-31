@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import templatesRouter from './routes/templates.js';
 import savedPopsRouter from './routes/savedPops.js';
 import smaregiRouter from './routes/smaregi.js';
+import authRouter from './routes/auth.js';
 
 // 環境変数を読み込み
 dotenv.config();
@@ -55,6 +56,7 @@ app.get('/health', (req, res) => {
 app.use('/api/templates', templatesRouter);
 app.use('/api/saved-pops', savedPopsRouter);
 app.use('/api/smaregi', smaregiRouter);
+app.use('/api/auth', authRouter);
 
 // 404ハンドラー
 app.use((req, res) => {

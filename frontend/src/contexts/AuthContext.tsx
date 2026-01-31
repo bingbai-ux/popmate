@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { setUseMockData as setApiMockData } from '@/lib/api';
 
 // 認証状態の型定義
 interface AuthState {
@@ -36,7 +37,13 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://popmate-product
 // Provider コンポーネント
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>(defaultAuthState);
-  const [useMockData, setUseMockData] = useState<boolean>(true);
+  const [useMockData, setUseMockDataState] = useState<boolean>(true);
+
+  // モックデータモードを設定（APIモジュールも同期）
+  const setUseMockData = useCallback((value: boolean) => {
+    setUseMockDataState(value);
+    setApiMockData(value);
+  }, []);
 
   // 認証状態をチェック
   const checkAuthStatus = useCallback(async () => {
@@ -57,36 +64,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // バックエンドで認証状態を確認
-      const response = await fetch(`${API_BASE_URL}/api/auth/smaregi/status`, {
-        headers: {
-          'x-smaregi-token': token,
-          'x-smaregi-contract-id': contractId,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAuthState({
-          isAuthenticated: data.authenticated,
-          isLoading: false,
-          contractId: data.contractId || contractId,
-          error: null,
-        });
-        // モックデータモードを無効化
-        if (data.authenticated) {
-          setUseMockData(false);
-        }
-      } else {
-        // トークンが無効な場合はクリア
+      // トークンの有効期限をチェック
+      const expiresAt = localStorage.getItem('smaregi_token_expires_at');
+      if (expiresAt && Date.now() > parseInt(expiresAt, 10)) {
+        // トークンが期限切れ
         localStorage.removeItem('smaregi_token');
         localStorage.removeItem('smaregi_contract_id');
+        localStorage.removeItem('smaregi_token_expires_at');
         setAuthState({
           isAuthenticated: false,
           isLoading: false,
           contractId: null,
           error: null,
         });
+        return;
+      }
+
+      // バックエンドで認証状態を確認
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/smaregi/status`, {
+          headers: {
+            'x-smaregi-token': token,
+            'x-smaregi-contract-id': contractId,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.authenticated) {
+            setAuthState({
+              isAuthenticated: true,
+              isLoading: false,
+              contractId: data.contractId || contractId,
+              error: null,
+            });
+            // モックデータモードを無効化
+            setUseMockData(false);
+          } else {
+            // トークンが無効な場合はクリア
+            localStorage.removeItem('smaregi_token');
+            localStorage.removeItem('smaregi_contract_id');
+            localStorage.removeItem('smaregi_token_expires_at');
+            setAuthState({
+              isAuthenticated: false,
+              isLoading: false,
+              contractId: null,
+              error: null,
+            });
+          }
+        } else {
+          // APIエラーの場合はローカルの認証情報を信頼
+          setAuthState({
+            isAuthenticated: true,
+            isLoading: false,
+            contractId: contractId,
+            error: null,
+          });
+          setUseMockData(false);
+        }
+      } catch (fetchError) {
+        // ネットワークエラーの場合はローカルの認証情報を信頼
+        console.warn('Auth status check failed, using local credentials:', fetchError);
+        setAuthState({
+          isAuthenticated: true,
+          isLoading: false,
+          contractId: contractId,
+          error: null,
+        });
+        setUseMockData(false);
       }
     } catch (error) {
       console.error('Auth status check failed:', error);
@@ -97,10 +142,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error: '認証状態の確認に失敗しました',
       });
     }
-  }, []);
+  }, [setUseMockData]);
 
   // ログイン（スマレジ認証画面へリダイレクト）
   const login = useCallback(() => {
+    // バックエンドの認証開始エンドポイントへリダイレクト
     window.location.href = `${API_BASE_URL}/api/auth/smaregi/authorize`;
   }, []);
 
@@ -108,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem('smaregi_token');
     localStorage.removeItem('smaregi_contract_id');
+    localStorage.removeItem('smaregi_token_expires_at');
     setAuthState({
       isAuthenticated: false,
       isLoading: false,
@@ -115,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error: null,
     });
     setUseMockData(true);
-  }, []);
+  }, [setUseMockData]);
 
   // 初回マウント時に認証状態をチェック
   useEffect(() => {
