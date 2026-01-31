@@ -52,8 +52,7 @@ export default function PropertyPanel({
 
   const filteredFonts = fontCategory === 'all' ? FONTS : FONTS.filter(f => f.category === fontCategory);
 
-  // テキスト要素に{{taxIncludedPrice}}が含まれているかチェック
-  const hasTaxIncludedPrice = element.type === 'text' && element.content?.includes('{{taxIncludedPrice}}');
+
 
   return (
     <div className="h-full overflow-y-auto">
@@ -87,42 +86,6 @@ export default function PropertyPanel({
               <textarea value={element.content} onChange={(e) => onUpdate(element.id, { content: e.target.value } as Partial<TextElement>)} className="w-full px-3 py-2 border border-border rounded-lg text-sm resize-none" rows={4} placeholder="文字を入力" />
             </div>
 
-            {/* 税込価格設定（{{taxIncludedPrice}}が含まれている場合のみ表示） */}
-            {hasTaxIncludedPrice && onRoundingChange && (
-              <div className="border-t border-gray-200 pt-3 mt-3">
-                <label className="text-xs text-gray-500 font-medium">税込価格設定</label>
-                
-                {/* 端数処理 */}
-                <div className="mt-2">
-                  <label className="text-xs text-gray-500">端数処理</label>
-                  <div className="flex gap-1 mt-1">
-                    {[
-                      { value: 'floor' as const, label: '切り捨て' },
-                      { value: 'round' as const, label: '四捨五入' },
-                      { value: 'ceil' as const, label: '切り上げ' },
-                    ].map(({ value, label }) => (
-                      <button
-                        key={value}
-                        onClick={() => onRoundingChange(value)}
-                        className={`
-                          flex-1 py-1 text-xs rounded border transition-colors
-                          ${roundingMethod === value
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}
-                        `}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 税率表示（参考情報） */}
-                <p className="text-xs text-gray-400 mt-2">
-                  ※ 税率は商品データに基づき自動判定されます（8%/10%）
-                </p>
-              </div>
-            )}
 
             <div>
               <label className="text-xs font-medium text-gray-500 block mb-2">フォント</label>

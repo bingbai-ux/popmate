@@ -18,6 +18,8 @@ import {
   DEFAULT_TEXT_STYLE,
 } from '@/types/editor';
 import { getTemplateById } from '@/types/template';
+import { loadSelectedProducts, saveSelectedProducts } from '@/lib/selectedProductsStorage';
+import { loadEditorState } from '@/lib/editorStorage';
 
 function EditContent() {
   const searchParams = useSearchParams();
@@ -42,32 +44,23 @@ function EditContent() {
 
   // 初期データ読み込み
   useEffect(() => {
-    // sessionStorageから商品データを取得
-    const savedProducts = sessionStorage.getItem('selectedProducts');
-    if (savedProducts) {
-      try {
-        const parsed = JSON.parse(savedProducts);
-        setProducts(parsed);
-        if (parsed.length > 0) {
-          setSelectedProductId(parsed[0].productId);
-        }
-      } catch (e) {
-        console.error('Failed to parse selectedProducts', e);
-      }
+    // selectedProductsStorageから商品データを取得（正しいキーを使用）
+    const savedProducts = loadSelectedProducts(templateId);
+    if (savedProducts && savedProducts.length > 0) {
+      setProducts(savedProducts);
+      setSelectedProductId(savedProducts[0].productId);
+      console.log('[edit] 選択商品を読み込みました:', savedProducts.length, '件');
+    } else {
+      console.log('[edit] 選択商品が見つかりません');
     }
 
-    // sessionStorageからテンプレート要素を取得
-    const savedElements = sessionStorage.getItem('templateElements');
-    if (savedElements) {
-      try {
-        setElements(JSON.parse(savedElements));
-      } catch (e) {
-        console.error('Failed to parse templateElements', e);
-      }
-    }
-
-    // デフォルト要素がない場合
-    if (!savedElements) {
+    // editorStorageからテンプレート要素を取得
+    const savedEditorState = loadEditorState(templateId);
+    if (savedEditorState && savedEditorState.elements.length > 0) {
+      setElements(savedEditorState.elements as unknown as EditorElement[]);
+      console.log('[edit] エディター状態を読み込みました:', savedEditorState.elements.length, '要素');
+    } else {
+      // デフォルト要素を設定
       setElements([
         {
           id: 'default-name',
@@ -76,7 +69,7 @@ function EditContent() {
           size: { width: 80, height: 10 },
           rotation: 0,
           zIndex: 1,
-          content: '{{productName}}',
+          content: 'テキスト{{productName}}',
           style: { ...DEFAULT_TEXT_STYLE, fontSize: 16, fontWeight: 'bold' },
         },
         {
@@ -102,8 +95,18 @@ function EditContent() {
       ]);
     }
 
+    // 税設定を復元
+    try {
+      const savedTaxSettings = sessionStorage.getItem('taxSettings');
+      if (savedTaxSettings) {
+        setTaxSettings(JSON.parse(savedTaxSettings));
+      }
+    } catch (e) {
+      console.error('[edit] 税設定の復元に失敗:', e);
+    }
+
     setIsLoaded(true);
-  }, []);
+  }, [templateId]);
 
   // 商品選択
   const handleSelectProduct = useCallback((productId: string) => {
@@ -119,8 +122,8 @@ function EditContent() {
 
   // 保存
   const handleSave = () => {
-    sessionStorage.setItem('selectedProducts', JSON.stringify(products));
-    sessionStorage.setItem('templateElements', JSON.stringify(elements));
+    // selectedProductsStorageを使用して保存
+    saveSelectedProducts(products, templateId);
     sessionStorage.setItem('taxSettings', JSON.stringify(taxSettings));
     alert('保存しました');
   };
@@ -172,8 +175,7 @@ function EditContent() {
           <button
             onClick={() => {
               // 印刷前にデータを保存
-              sessionStorage.setItem('selectedProducts', JSON.stringify(products));
-              sessionStorage.setItem('templateElements', JSON.stringify(elements));
+              saveSelectedProducts(products, templateId);
               sessionStorage.setItem('taxSettings', JSON.stringify(taxSettings));
               router.push(`/print?template=${templateId}`);
             }}
