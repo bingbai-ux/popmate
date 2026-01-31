@@ -45,11 +45,28 @@ export function replacePlaceholders(
 ): string {
   if (!text) return text;
 
-  const taxIncludedPrice = calculateTaxIncludedPrice(
-    product.price,
-    taxSettings.taxRate,
-    taxSettings.roundingMode
-  );
+  // 商品の税区分を確認（0:税込, 1:税抜, 2:非課税）
+  const taxDivision = product.taxDivision || '1';
+  
+  // 商品の税率を使用（スマレジから取得した値、デフォルト10%）
+  const productTaxRate = product.taxRate || taxSettings.taxRate;
+  
+  let taxIncludedPrice: number;
+  
+  if (taxDivision === '0') {
+    // すでに税込価格
+    taxIncludedPrice = product.price;
+  } else if (taxDivision === '2') {
+    // 非課税
+    taxIncludedPrice = product.price;
+  } else {
+    // 税抜価格 → 税込に変換
+    taxIncludedPrice = calculateTaxIncludedPrice(
+      product.price,
+      productTaxRate,
+      taxSettings.roundingMode
+    );
+  }
 
   const replacements: Record<string, string> = {
     '{{productName}}': product.productName || '',
@@ -58,7 +75,9 @@ export function replacePlaceholders(
     '{{taxIncludedPrice}}': formatPrice(taxIncludedPrice),
     '{{taxIncludedPriceNumber}}': formatPriceNumber(taxIncludedPrice),
     '{{description}}': product.description || '',
-    '{{maker}}': product.tag || '',
+    '{{maker}}': product.maker || product.groupCode || product.tag || '',
+    '{{taxRate}}': `${productTaxRate}%`,
+    '{{taxRateNumber}}': String(productTaxRate),
     '{{category}}': product.categoryName || '',
     '{{productCode}}': product.productCode || '',
   };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, Suspense } from 'react';
+import { useState, useCallback, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
@@ -43,18 +43,74 @@ function EditorContent() {
   const [zoom, setZoom] = useState(1);
   const [roundingMethod, setRoundingMethod] = useState<RoundingMethod>('floor');
   const [isInitialized, setIsInitialized] = useState(false);
+  const [copiedElement, setCopiedElement] = useState<EditorElement | null>(null);
+
+  // Undo/Redo用の履歴管理
+  const [history, setHistory] = useState<EditorElement[][]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const isUndoRedoRef = useRef(false);
+
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
 
   const selectedElement = elements.find((el) => el.id === selectedElementId) || null;
+
+  // 履歴に追加
+  const pushHistory = useCallback((newElements: EditorElement[]) => {
+    if (isUndoRedoRef.current) {
+      isUndoRedoRef.current = false;
+      return;
+    }
+    setHistory(prev => {
+      // 現在位置より後の履歴を削除
+      const newHistory = prev.slice(0, historyIndex + 1);
+      // 新しい状態を追加（最大50件）
+      newHistory.push(JSON.parse(JSON.stringify(newElements)));
+      if (newHistory.length > 50) {
+        newHistory.shift();
+        return newHistory;
+      }
+      return newHistory;
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, 49));
+  }, [historyIndex]);
+
+  // Undo
+  const handleUndo = useCallback(() => {
+    if (!canUndo) return;
+    isUndoRedoRef.current = true;
+    const prevIndex = historyIndex - 1;
+    setHistoryIndex(prevIndex);
+    setElements(JSON.parse(JSON.stringify(history[prevIndex])));
+    console.log('[editor] Undo実行');
+  }, [canUndo, historyIndex, history]);
+
+  // Redo
+  const handleRedo = useCallback(() => {
+    if (!canRedo) return;
+    isUndoRedoRef.current = true;
+    const nextIndex = historyIndex + 1;
+    setHistoryIndex(nextIndex);
+    setElements(JSON.parse(JSON.stringify(history[nextIndex])));
+    console.log('[editor] Redo実行');
+  }, [canRedo, historyIndex, history]);
 
   // 初期化時に保存された状態を復元
   useEffect(() => {
     const savedState = loadEditorState(templateId);
     if (savedState) {
-      // 保存された要素を復元（型変換が必要）
-      setElements(savedState.elements as unknown as EditorElement[]);
+      const restoredElements = savedState.elements as unknown as EditorElement[];
+      setElements(restoredElements);
       setZoom(savedState.zoom);
       setRoundingMethod(savedState.roundingMethod);
+      // 初期状態を履歴に追加
+      setHistory([JSON.parse(JSON.stringify(restoredElements))]);
+      setHistoryIndex(0);
       console.log('[editor] 保存された状態を復元しました');
+    } else {
+      // 空の初期状態を履歴に追加
+      setHistory([[]]);
+      setHistoryIndex(0);
     }
     setIsInitialized(true);
   }, [templateId]);
@@ -70,6 +126,113 @@ function EditorContent() {
       roundingMethod,
     });
   }, [elements, templateId, zoom, roundingMethod, isInitialized]);
+
+  // 要素変更時に履歴を更新（デバウンス付き）
+  const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (!isInitialized || isUndoRedoRef.current) return;
+    
+    // デバウンス: 連続した変更を1つの履歴としてまとめる
+    if (historyTimeoutRef.current) {
+      clearTimeout(historyTimeoutRef.current);
+    }
+    historyTimeoutRef.current = setTimeout(() => {
+      pushHistory(elements);
+    }, 500);
+
+    return () => {
+      if (historyTimeoutRef.current) {
+        clearTimeout(historyTimeoutRef.current);
+      }
+    };
+  }, [elements, isInitialized, pushHistory]);
+
+  // キーボード操作
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // テキスト入力中（input, textarea にフォーカス）の場合はスキップ
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
+        return;
+      }
+
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+      // ============ Undo (Ctrl/Cmd + Z) ============
+      if (isCtrlOrCmd && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      // ============ Redo (Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y) ============
+      if ((isCtrlOrCmd && e.key === 'z' && e.shiftKey) || (isCtrlOrCmd && e.key === 'y')) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      // ============ 矢印キー移動 ============
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && selectedElementId) {
+        e.preventDefault();
+        const step = e.shiftKey ? 1 : 0.1; // Shift押下で1mm移動、通常は0.1mm
+
+        setElements(prev => prev.map(el => {
+          if (el.id !== selectedElementId) return el;
+          const newPosition = { ...el.position };
+          switch (e.key) {
+            case 'ArrowUp':    newPosition.y = Math.max(0, el.position.y - step); break;
+            case 'ArrowDown':  newPosition.y = el.position.y + step; break;
+            case 'ArrowLeft':  newPosition.x = Math.max(0, el.position.x - step); break;
+            case 'ArrowRight': newPosition.x = el.position.x + step; break;
+          }
+          return { ...el, position: newPosition };
+        }));
+      }
+
+      // ============ コピー (Ctrl/Cmd + C) ============
+      if (isCtrlOrCmd && e.key === 'c' && selectedElementId) {
+        e.preventDefault();
+        const elementToCopy = elements.find(el => el.id === selectedElementId);
+        if (elementToCopy) {
+          setCopiedElement(JSON.parse(JSON.stringify(elementToCopy)));
+          console.log('[editor] 要素をコピーしました');
+        }
+      }
+
+      // ============ ペースト (Ctrl/Cmd + V) ============
+      if (isCtrlOrCmd && e.key === 'v' && copiedElement) {
+        e.preventDefault();
+        const newElement = {
+          ...copiedElement,
+          id: `${copiedElement.type}-${Date.now()}`, // 新しいIDを付与
+          position: {
+            x: copiedElement.position.x + 2, // 少しずらして配置
+            y: copiedElement.position.y + 2,
+          },
+          zIndex: elements.length + 1,
+        };
+        setElements(prev => [...prev, newElement as EditorElement]);
+        setSelectedElementId(newElement.id);
+        console.log('[editor] 要素をペーストしました');
+      }
+
+      // ============ 削除 (Delete / Backspace) ============
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementId) {
+        e.preventDefault();
+        setElements(prev => prev.filter(el => el.id !== selectedElementId));
+        setSelectedElementId(null);
+      }
+
+      // ============ 全選択解除 (Escape) ============
+      if (e.key === 'Escape') {
+        setSelectedElementId(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedElementId, elements, copiedElement, handleUndo, handleRedo]);
 
   // 要素追加のヘルパー
   const addElement = useCallback((element: EditorElement) => {
@@ -231,11 +394,42 @@ function EditorContent() {
           <span className="text-sm text-gray-500">
             {template.width} × {template.height} mm
           </span>
+
+          {/* Undo/Redoボタン */}
+          <div className="h-6 w-px bg-border ml-2" />
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleUndo}
+              disabled={!canUndo}
+              className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="元に戻す (Ctrl+Z)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+              </svg>
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={!canRedo}
+              className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="やり直す (Ctrl+Shift+Z)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <button onClick={handleNext} className="btn-primary text-sm py-2">
-          次へ：商品データ選択
-        </button>
+        <div className="flex items-center gap-3">
+          {/* キーボードショートカットヒント */}
+          <div className="text-xs text-gray-400 hidden lg:block">
+            矢印: 0.1mm | Shift+矢印: 1mm | Ctrl+Z: 戻す | Ctrl+C/V: コピー
+          </div>
+          <button onClick={handleNext} className="btn-primary text-sm py-2">
+            次へ：商品データ選択
+          </button>
+        </div>
       </div>
 
       {/* ツールバー */}
