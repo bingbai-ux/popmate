@@ -1,229 +1,154 @@
-// APIクライアント（Client Credentials Grant対応版）
+// frontend/src/lib/api.ts
 
-import { Product, Category, ProductSearchParams, ApiResponse, MOCK_PRODUCTS, MOCK_CATEGORIES } from '@/types/product';
+import { Product } from '@/types/product';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://popmate-production.up.railway.app';
+// ─── 設定 ───
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://popmate-production.up.railway.app';
 
-// デフォルトはfalse（スマレジ実データを使用）
-// NEXT_PUBLIC_USE_MOCK=true の場合のみモックデータを使用
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
+// ─── モックデータ（バックエンド不通時のフォールバック用） ───
+const MOCK_PRODUCTS: Product[] = [
+  {
+    productId: 'PRD001',
+    productCode: '4901234567890',
+    productName: 'オーガニック全粒粉パン',
+    price: 480,
+    categoryId: 'CAT001',
+    categoryName: 'パン・ベーカリー',
+    groupCode: 'GRP001',
+    description: '国産有機全粒粉100%使用',
+    tag: '自社製造',
+  },
+  {
+    productId: 'PRD002',
+    productCode: '4901234567891',
+    productName: '有機豆乳 無調整 1000ml',
+    price: 298,
+    categoryId: 'CAT002',
+    categoryName: '飲料',
+    groupCode: 'GRP002',
+    description: '有機大豆100%使用の無調整豆乳',
+    tag: 'マルサン',
+  },
+  {
+    productId: 'PRD003',
+    productCode: '4901234567892',
+    productName: 'フェアトレード ダークチョコレート',
+    price: 580,
+    categoryId: 'CAT003',
+    categoryName: 'お菓子',
+    groupCode: 'GRP003',
+    description: 'カカオ72% オーガニック',
+    tag: 'ピープルツリー',
+  },
+];
 
-// モックデータモードを取得（グローバル状態から）
-let useMockData = USE_MOCK;
-
-export function setUseMockData(value: boolean) {
-  useMockData = value;
+// ─── スマレジAPIレスポンス → PopMate Product型 変換 ───
+function transformSmaregiProduct(p: any): Product {
+  return {
+    productId: String(p.productId || ''),
+    productCode: String(p.productCode || ''),
+    productName: String(p.productName || ''),
+    price: Number(p.price) || 0,
+    categoryId: String(p.categoryId || ''),
+    categoryName: String(p.categoryName || ''),
+    groupCode: String(p.groupCode || ''),
+    description: String(p.description || ''),
+    tag: String(p.supplierProductNo || p.tag || ''),
+  };
 }
 
-export function getUseMockData(): boolean {
-  return useMockData;
-}
+// ─── API関数 ───
 
 /**
- * スマレジAPIとの接続状態を確認
+ * スマレジ接続テスト
  */
-export async function checkSmaregiConnection(): Promise<{
+export async function checkConnection(): Promise<{
   connected: boolean;
   message: string;
 }> {
-  if (useMockData) {
-    return { connected: false, message: 'モックデータモードです' };
-  }
   try {
-    const res = await fetch(`${API_BASE_URL}/api/auth/smaregi/status`);
+    const res = await fetch(`${API_BASE}/api/auth/smaregi/status`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
-  } catch {
-    return { connected: false, message: 'バックエンドに接続できません' };
+  } catch (e: any) {
+    return { connected: false, message: `接続失敗: ${e.message}` };
   }
-}
-
-/**
- * スマレジAPIレスポンスをProduct型にマッピング
- */
-function transformSmaregiProduct(item: Record<string, unknown>): Product {
-  return {
-    productId: String(item.productId || item.product_id || ''),
-    productCode: String(item.productCode || item.product_code || ''),
-    productName: String(item.productName || item.product_name || ''),
-    price: Number(item.price || item.sellingPrice || item.selling_price || 0),
-    categoryId: String(item.categoryId || item.category_id || ''),
-    categoryName: String(item.categoryName || item.category_name || ''),
-    groupCode: String(item.groupCode || item.group_code || ''),
-    description: String(item.description || ''),
-    tag: String(item.tag || item.supplierProductNo || item.supplier_product_no || ''),
-  };
-}
-
-/**
- * スマレジAPIレスポンスをCategory型にマッピング
- */
-function transformSmaregiCategory(item: Record<string, unknown>): Category {
-  return {
-    categoryId: String(item.categoryId || item.category_id || ''),
-    categoryCode: String(item.categoryCode || item.category_code || ''),
-    categoryName: String(item.categoryName || item.category_name || ''),
-    level: Number(item.level || 1),
-    parentCategoryId: item.parentCategoryId || item.parent_category_id 
-      ? String(item.parentCategoryId || item.parent_category_id) 
-      : undefined,
-  };
-}
-
-/**
- * APIリクエストを実行（Client Credentials Grantなので認証ヘッダー不要）
- */
-async function fetchApi<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'API error' }));
-    throw new Error(error.message || `API error: ${response.status}`);
-  }
-
-  return await response.json();
 }
 
 /**
  * 商品一覧を取得
+ * - まずバックエンド（スマレジ実データ）を試す
+ * - 失敗したらモックデータにフォールバック
  */
-export async function fetchProducts(params: ProductSearchParams = {}): Promise<Product[]> {
-  // モックモードの場合
-  if (useMockData) {
-    console.log('=== Using mock products ===', params);
-    let products = [...MOCK_PRODUCTS];
-    
-    // キーワード検索
-    if (params.keyword) {
-      const keyword = params.keyword.toLowerCase();
-      products = products.filter(p => 
-        p.productName.toLowerCase().includes(keyword) ||
-        p.productCode.toLowerCase().includes(keyword) ||
-        p.description.toLowerCase().includes(keyword)
-      );
-    }
-    
-    // カテゴリフィルター
-    if (params.categoryId) {
-      products = products.filter(p => p.categoryId === params.categoryId);
-    }
-    
-    return products;
-  }
-
-  // 本番APIコール（Client Credentials Grant - 認証ヘッダー不要）
+export async function fetchProducts(): Promise<{
+  products: Product[];
+  source: 'smaregi' | 'mock';
+}> {
   try {
-    const queryParams = new URLSearchParams();
-    if (params.keyword) queryParams.append('keyword', params.keyword);
-    if (params.categoryId) queryParams.append('category_id', params.categoryId);
-    if (params.page) queryParams.append('page', params.page.toString());
-    if (params.limit) queryParams.append('limit', (params.limit || 100).toString());
+    console.log('[api] 商品データ取得中...', `${API_BASE}/api/smaregi/products`);
 
-    const result = await fetchApi<ApiResponse<Record<string, unknown>[]>>(
-      `${API_BASE_URL}/api/smaregi/products?${queryParams.toString()}`
-    );
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to fetch products');
+    const res = await fetch(`${API_BASE}/api/smaregi/products?limit=1000`, {
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json' },
+    });
+
+    console.log('[api] レスポンスステータス:', res.status);
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
 
-    // スマレジAPIレスポンスをProduct型にマッピング
-    return result.data.map(transformSmaregiProduct);
-  } catch (error) {
-    console.error('=== Error fetching products ===', error);
-    throw error;
-  }
-}
+    const data = await res.json();
+    console.log('[api] 取得データ件数:', Array.isArray(data) ? data.length : 'not array');
 
-/**
- * 商品一覧を全件取得（ページネーション対応）
- */
-export async function fetchAllProducts(params: Omit<ProductSearchParams, 'page' | 'limit'> = {}): Promise<Product[]> {
-  // モックモードの場合
-  if (useMockData) {
-    return fetchProducts(params);
-  }
+    // スマレジAPIのレスポンスは配列
+    const products = Array.isArray(data)
+      ? data.map(transformSmaregiProduct)
+      : [];
 
-  // 本番APIコール（ページネーション）
-  const allProducts: Product[] = [];
-  let page = 1;
-  const limit = 100;
-  let hasMore = true;
-
-  while (hasMore) {
-    const products = await fetchProducts({ ...params, page, limit });
-    allProducts.push(...products);
-    
-    // 取得件数がlimit未満なら終了
-    if (products.length < limit) {
-      hasMore = false;
-    } else {
-      page++;
+    if (products.length === 0) {
+      console.log('[api] スマレジから0件、モックデータを使用');
+      return { products: MOCK_PRODUCTS, source: 'mock' };
     }
 
-    // 安全のため最大10ページまで
-    if (page > 10) {
-      console.warn('Reached maximum page limit (10)');
-      break;
-    }
+    return { products, source: 'smaregi' };
+  } catch (error: any) {
+    console.error('[api] スマレジ接続エラー、モックデータを使用:', error.message);
+    return { products: MOCK_PRODUCTS, source: 'mock' };
   }
-
-  return allProducts;
 }
 
 /**
  * カテゴリ一覧を取得
  */
-export async function fetchCategories(): Promise<Category[]> {
-  // モックモードの場合
-  if (useMockData) {
-    console.log('=== Using mock categories ===');
-    return MOCK_CATEGORIES;
-  }
-
-  // 本番APIコール（Client Credentials Grant - 認証ヘッダー不要）
+export async function fetchCategories(): Promise<string[]> {
   try {
-    const result = await fetchApi<ApiResponse<Record<string, unknown>[]>>(
-      `${API_BASE_URL}/api/smaregi/categories`
-    );
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to fetch categories');
-    }
+    const res = await fetch(`${API_BASE}/api/smaregi/categories`, {
+      cache: 'no-store',
+    });
 
-    // スマレジAPIレスポンスをCategory型にマッピング
-    return result.data.map(transformSmaregiCategory);
-  } catch (error) {
-    console.error('=== Error fetching categories ===', error);
-    throw error;
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      return data.map((c: any) => c.categoryName || '').filter(Boolean);
+    }
+    return [];
+  } catch {
+    return [];
   }
 }
 
-/**
- * 商品詳細を取得
- */
-export async function fetchProductById(productId: string): Promise<Product | null> {
-  // モックモードの場合
-  if (useMockData) {
-    return MOCK_PRODUCTS.find(p => p.productId === productId) || null;
-  }
+// ─── 後方互換性のためのエクスポート ───
+// 既存コードが getProducts() や getMockProducts() を呼んでいる場合のため
 
-  // 本番APIコール（Client Credentials Grant - 認証ヘッダー不要）
-  try {
-    const result = await fetchApi<ApiResponse<Record<string, unknown>>>(
-      `${API_BASE_URL}/api/smaregi/products/${productId}`
-    );
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to fetch product');
-    }
+export async function getProducts(): Promise<Product[]> {
+  const { products } = await fetchProducts();
+  return products;
+}
 
-    return transformSmaregiProduct(result.data);
-  } catch (error) {
-    console.error('=== Error fetching product ===', error);
-    return null;
-  }
+export function getMockProducts(): Product[] {
+  return MOCK_PRODUCTS;
 }

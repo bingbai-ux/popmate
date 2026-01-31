@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { AuthProvider } from '@/contexts/AuthContext';
 
 export const metadata: Metadata = {
   title: 'ポップメイト - プライスポップ作成サービス',
@@ -23,9 +22,7 @@ export default function RootLayout({
         <link rel="icon" href="/popmate_icon_blue.png" type="image/png" />
       </head>
       <body className="min-h-screen bg-background-light">
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        {children}
       </body>
     </html>
   );

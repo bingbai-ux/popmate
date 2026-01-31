@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, Suspense } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
@@ -8,30 +8,60 @@ import ProgressBar from '@/components/ProgressBar';
 import SearchFilters, { SearchFiltersType } from '@/components/data-select/SearchFilters';
 import ProductTable from '@/components/data-select/ProductTable';
 import SelectedProductsSidebar from '@/components/data-select/SelectedProductsSidebar';
-import { Product, Category, MOCK_PRODUCTS, MOCK_CATEGORIES } from '@/types/product';
+import { Product, Category } from '@/types/product';
+import { fetchProducts } from '@/lib/api';
 
 function DataSelectContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const templateId = searchParams.get('template') || 'price-pop';
 
-  const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
-  const [categories] = useState<Category[]>(MOCK_CATEGORIES);
+  // 商品データの状態
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [dataSource, setDataSource] = useState<'smaregi' | 'mock'>('mock');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // メーカー・仕入れ先の一覧を抽出
-  const makers = [...new Set(MOCK_PRODUCTS.map(p => p.tag).filter(Boolean))] as string[];
-  const suppliers = [...new Set(MOCK_PRODUCTS.map(p => p.groupCode).filter(Boolean))];
+  // 商品データから動的にカテゴリ・メーカー・仕入れ先を抽出
+  const categories: Category[] = [...new Set(allProducts.map(p => p.categoryName).filter(Boolean))]
+    .map((name, index) => ({
+      categoryId: `CAT${index}`,
+      categoryCode: `CAT${index}`,
+      categoryName: name,
+      level: 1,
+      displaySequence: index,
+    }));
+  const makers = [...new Set(allProducts.map(p => p.tag).filter(Boolean))] as string[];
+  const suppliers = [...new Set(allProducts.map(p => p.groupCode).filter(Boolean))];
 
-  const selectedProducts = products.filter(p => selectedIds.includes(p.productId));
+  const selectedProducts = filteredProducts.filter(p => selectedIds.includes(p.productId));
+
+  // 初回マウント時に商品データを取得
+  useEffect(() => {
+    const loadProducts = async () => {
+      setIsLoading(true);
+      try {
+        const result = await fetchProducts();
+        setAllProducts(result.products);
+        setFilteredProducts(result.products);
+        setDataSource(result.source);
+        console.log(`[data-select] ${result.products.length}件の商品を${result.source}から取得`);
+      } catch (e: any) {
+        console.error('[data-select] 商品データ取得エラー:', e.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadProducts();
+  }, []);
 
   // 検索実行
   const handleSearch = useCallback((filters: SearchFiltersType) => {
     setIsLoading(true);
     
     setTimeout(() => {
-      let filtered = [...MOCK_PRODUCTS];
+      let filtered = [...allProducts];
 
       if (filters.keyword) {
         const kw = filters.keyword.toLowerCase();
@@ -54,10 +84,10 @@ function DataSelectContent() {
         filtered = filtered.filter(p => filters.supplierIds.includes(p.groupCode));
       }
 
-      setProducts(filtered);
+      setFilteredProducts(filtered);
       setIsLoading(false);
     }, 300);
-  }, []);
+  }, [allProducts]);
 
   // 商品選択
   const handleToggleSelect = useCallback((productId: string) => {
@@ -69,14 +99,14 @@ function DataSelectContent() {
   }, []);
 
   const handleSelectAll = useCallback(() => {
-    const allIds = products.map(p => p.productId);
+    const allIds = filteredProducts.map(p => p.productId);
     const allSelected = allIds.every(id => selectedIds.includes(id));
     if (allSelected) {
       setSelectedIds(prev => prev.filter(id => !allIds.includes(id)));
     } else {
       setSelectedIds(prev => [...new Set([...prev, ...allIds])]);
     }
-  }, [products, selectedIds]);
+  }, [filteredProducts, selectedIds]);
 
   const handleRemoveSelected = useCallback((productId: string) => {
     setSelectedIds(prev => prev.filter(id => id !== productId));
@@ -105,6 +135,10 @@ function DataSelectContent() {
             </svg>
             <span className="text-sm">デザイン編集に戻る</span>
           </Link>
+          {/* データソース表示（デバッグ用） */}
+          <span className={`text-xs px-2 py-1 rounded ${dataSource === 'smaregi' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+            {dataSource === 'smaregi' ? 'スマレジ連携中' : 'サンプルデータ'}
+          </span>
         </div>
         <button
           onClick={handleNext}
@@ -133,7 +167,7 @@ function DataSelectContent() {
 
           <div className="flex-1 overflow-auto px-4 pb-4">
             <ProductTable
-              products={products}
+              products={filteredProducts}
               selectedIds={selectedIds}
               onToggleSelect={handleToggleSelect}
               onSelectAll={handleSelectAll}
