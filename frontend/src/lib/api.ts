@@ -1,12 +1,14 @@
-// APIクライアント（実API対応版）
+// APIクライアント（Client Credentials Grant対応版）
 
 import { Product, Category, ProductSearchParams, ApiResponse, MOCK_PRODUCTS, MOCK_CATEGORIES } from '@/types/product';
-import { getAuthHeaders, refreshToken } from './auth';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://popmate-production.up.railway.app';
 
+// 開発時はtrue、本番接続時はfalse
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === 'true';
+
 // モックデータモードを取得（グローバル状態から）
-let useMockData = true;
+let useMockData = USE_MOCK;
 
 export function setUseMockData(value: boolean) {
   useMockData = value;
@@ -14,6 +16,24 @@ export function setUseMockData(value: boolean) {
 
 export function getUseMockData(): boolean {
   return useMockData;
+}
+
+/**
+ * スマレジAPIとの接続状態を確認
+ */
+export async function checkSmaregiConnection(): Promise<{
+  connected: boolean;
+  message: string;
+}> {
+  if (useMockData) {
+    return { connected: false, message: 'モックデータモードです' };
+  }
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/smaregi/status`);
+    return await res.json();
+  } catch {
+    return { connected: false, message: 'バックエンドに接続できません' };
+  }
 }
 
 /**
@@ -49,49 +69,21 @@ function transformSmaregiCategory(item: Record<string, unknown>): Category {
 }
 
 /**
- * APIリクエストをリトライ付きで実行
+ * APIリクエストを実行（Client Credentials Grantなので認証ヘッダー不要）
  */
-async function fetchWithRetry<T>(
-  url: string,
-  options: RequestInit = {},
-  maxRetries = 3
-): Promise<T> {
-  let lastError: Error | null = null;
+async function fetchApi<T>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          ...getAuthHeaders(),
-          ...(options.headers || {}),
-        },
-      });
-
-      // 401エラーの場合はトークンをリフレッシュして再試行
-      if (response.status === 401 && attempt < maxRetries) {
-        const refreshed = await refreshToken();
-        if (refreshed) {
-          continue;
-        }
-      }
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      
-      if (attempt < maxRetries) {
-        // エクスポネンシャルバックオフ
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
-      }
-    }
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'API error' }));
+    throw new Error(error.message || `API error: ${response.status}`);
   }
 
-  throw lastError || new Error('API request failed');
+  return await response.json();
 }
 
 /**
@@ -121,7 +113,7 @@ export async function fetchProducts(params: ProductSearchParams = {}): Promise<P
     return products;
   }
 
-  // 本番APIコール
+  // 本番APIコール（Client Credentials Grant - 認証ヘッダー不要）
   try {
     const queryParams = new URLSearchParams();
     if (params.keyword) queryParams.append('keyword', params.keyword);
@@ -129,7 +121,7 @@ export async function fetchProducts(params: ProductSearchParams = {}): Promise<P
     if (params.page) queryParams.append('page', params.page.toString());
     if (params.limit) queryParams.append('limit', (params.limit || 100).toString());
 
-    const result = await fetchWithRetry<ApiResponse<Record<string, unknown>[]>>(
+    const result = await fetchApi<ApiResponse<Record<string, unknown>[]>>(
       `${API_BASE_URL}/api/smaregi/products?${queryParams.toString()}`
     );
     
@@ -191,9 +183,9 @@ export async function fetchCategories(): Promise<Category[]> {
     return MOCK_CATEGORIES;
   }
 
-  // 本番APIコール
+  // 本番APIコール（Client Credentials Grant - 認証ヘッダー不要）
   try {
-    const result = await fetchWithRetry<ApiResponse<Record<string, unknown>[]>>(
+    const result = await fetchApi<ApiResponse<Record<string, unknown>[]>>(
       `${API_BASE_URL}/api/smaregi/categories`
     );
     
@@ -218,9 +210,9 @@ export async function fetchProductById(productId: string): Promise<Product | nul
     return MOCK_PRODUCTS.find(p => p.productId === productId) || null;
   }
 
-  // 本番APIコール
+  // 本番APIコール（Client Credentials Grant - 認証ヘッダー不要）
   try {
-    const result = await fetchWithRetry<ApiResponse<Record<string, unknown>>>(
+    const result = await fetchApi<ApiResponse<Record<string, unknown>>>(
       `${API_BASE_URL}/api/smaregi/products/${productId}`
     );
     
