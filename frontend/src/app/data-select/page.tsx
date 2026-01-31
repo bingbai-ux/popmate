@@ -10,6 +10,7 @@ import ProductTable from '@/components/data-select/ProductTable';
 import SelectedProductsSidebar from '@/components/data-select/SelectedProductsSidebar';
 import { Product, Category } from '@/types/product';
 import { fetchProducts } from '@/lib/api';
+import { saveSelectedProducts, loadSelectedProducts } from '@/lib/selectedProductsStorage';
 
 function DataSelectContent() {
   const searchParams = useSearchParams();
@@ -22,6 +23,7 @@ function DataSelectContent() {
   const [dataSource, setDataSource] = useState<'smaregi' | 'mock'>('mock');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // 商品データから動的にカテゴリ・メーカー・仕入れ先を抽出
   const categories: Category[] = [...new Set(allProducts.map(p => p.categoryName).filter(Boolean))]
@@ -32,10 +34,11 @@ function DataSelectContent() {
       level: 1,
       displaySequence: index,
     }));
-  const makers = [...new Set(allProducts.map(p => p.tag).filter(Boolean))] as string[];
+  // メーカーはmaker列から取得（groupCodeからマッピング済み）
+  const makers = [...new Set(allProducts.map(p => p.maker).filter(Boolean))] as string[];
   const suppliers = [...new Set(allProducts.map(p => p.groupCode).filter(Boolean))];
 
-  const selectedProducts = filteredProducts.filter(p => selectedIds.includes(p.productId));
+  const selectedProducts = allProducts.filter(p => selectedIds.includes(p.productId));
 
   // 初回マウント時に商品データを取得
   useEffect(() => {
@@ -47,14 +50,35 @@ function DataSelectContent() {
         setFilteredProducts(result.products);
         setDataSource(result.source);
         console.log(`[data-select] ${result.products.length}件の商品を${result.source}から取得`);
+
+        // 保存された選択商品を復元
+        const savedProducts = loadSelectedProducts(templateId);
+        if (savedProducts && savedProducts.length > 0) {
+          const savedIds = savedProducts.map(p => p.productId);
+          // 取得した商品データに存在するIDのみ復元
+          const validIds = savedIds.filter(id => 
+            result.products.some(p => p.productId === id)
+          );
+          setSelectedIds(validIds);
+          console.log(`[data-select] ${validIds.length}件の選択商品を復元`);
+        }
       } catch (e: any) {
         console.error('[data-select] 商品データ取得エラー:', e.message);
       } finally {
         setIsLoading(false);
+        setIsInitialized(true);
       }
     };
     loadProducts();
-  }, []);
+  }, [templateId]);
+
+  // 選択商品が変更されたら保存（初期化後のみ）
+  useEffect(() => {
+    if (!isInitialized) return;
+    
+    const productsToSave = allProducts.filter(p => selectedIds.includes(p.productId));
+    saveSelectedProducts(productsToSave, templateId);
+  }, [selectedIds, allProducts, templateId, isInitialized]);
 
   // 検索実行
   const handleSearch = useCallback((filters: SearchFiltersType) => {
@@ -73,11 +97,13 @@ function DataSelectContent() {
       }
 
       if (filters.categoryIds.length > 0) {
-        filtered = filtered.filter(p => filters.categoryIds.includes(p.categoryId));
+        // カテゴリ名でフィルタ
+        filtered = filtered.filter(p => filters.categoryIds.includes(p.categoryName));
       }
 
       if (filters.makerIds.length > 0) {
-        filtered = filtered.filter(p => p.tag && filters.makerIds.includes(p.tag));
+        // メーカー（maker列）でフィルタ
+        filtered = filtered.filter(p => p.maker && filters.makerIds.includes(p.maker));
       }
 
       if (filters.supplierIds.length > 0) {
@@ -121,7 +147,7 @@ function DataSelectContent() {
       alert('商品を1つ以上選択してください');
       return;
     }
-    sessionStorage.setItem('selectedProducts', JSON.stringify(selectedProducts));
+    // 選択商品は自動保存されているので、そのまま遷移
     router.push(`/edit?template=${templateId}`);
   };
 
@@ -135,7 +161,7 @@ function DataSelectContent() {
             </svg>
             <span className="text-sm">デザイン編集に戻る</span>
           </Link>
-          {/* データソース表示（デバッグ用） */}
+          {/* データソース表示 */}
           <span className={`text-xs px-2 py-1 rounded ${dataSource === 'smaregi' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
             {dataSource === 'smaregi' ? 'スマレジ連携中' : 'サンプルデータ'}
           </span>

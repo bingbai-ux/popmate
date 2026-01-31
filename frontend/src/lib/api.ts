@@ -17,6 +17,9 @@ const MOCK_PRODUCTS: Product[] = [
     groupCode: 'GRP001',
     description: '国産有機全粒粉100%使用',
     tag: '自社製造',
+    maker: '自社製造',
+    taxDivision: '1',
+    taxRate: 8,
   },
   {
     productId: 'PRD002',
@@ -28,6 +31,9 @@ const MOCK_PRODUCTS: Product[] = [
     groupCode: 'GRP002',
     description: '有機大豆100%使用の無調整豆乳',
     tag: 'マルサン',
+    maker: 'マルサン',
+    taxDivision: '1',
+    taxRate: 8,
   },
   {
     productId: 'PRD003',
@@ -39,21 +45,41 @@ const MOCK_PRODUCTS: Product[] = [
     groupCode: 'GRP003',
     description: 'カカオ72% オーガニック',
     tag: 'ピープルツリー',
+    maker: 'ピープルツリー',
+    taxDivision: '1',
+    taxRate: 8,
   },
 ];
 
+// ─── 税率判定ロジック ───
+function determineTaxRate(reduceTaxId: string | null | undefined): number {
+  // 軽減税率ID判定
+  // null/undefined → 標準税率 10%
+  // "10000001" → 軽減税率 8%（食料品など）
+  // "10000003" → 軽減税率 8%（適用する）
+  if (reduceTaxId === '10000001' || reduceTaxId === '10000003') {
+    return 8;
+  }
+  return 10;
+}
+
 // ─── スマレジAPIレスポンス → PopMate Product型 変換 ───
 function transformSmaregiProduct(p: any): Product {
+  const taxRate = determineTaxRate(p.reduceTaxId);
+  
   return {
     productId: String(p.productId || ''),
     productCode: String(p.productCode || ''),
     productName: String(p.productName || ''),
     price: Number(p.price) || 0,
     categoryId: String(p.categoryId || ''),
-    categoryName: String(p.categoryName || ''),
+    categoryName: String(p.categoryName || ''),  // バックエンドが結合済みの値
     groupCode: String(p.groupCode || ''),
     description: String(p.description || ''),
     tag: String(p.supplierProductNo || p.tag || ''),
+    maker: String(p.groupCode || ''),  // groupCode をメーカーにマッピング
+    taxDivision: (String(p.taxDivision || '1') as '0' | '1' | '2'),
+    taxRate: taxRate,
   };
 }
 
@@ -135,13 +161,48 @@ export async function fetchCategories(): Promise<string[]> {
 
     if (!res.ok) return [];
 
-    const data = await res.json();
+    const json = await res.json();
+    const data = json.data || json;
     if (Array.isArray(data)) {
       return data.map((c: any) => c.categoryName || '').filter(Boolean);
     }
     return [];
   } catch {
     return [];
+  }
+}
+
+// ─── 税込価格計算 ───
+export type RoundingMethod = 'floor' | 'ceil' | 'round';
+
+/**
+ * 税込価格を計算
+ */
+export function calculateTaxIncludedPrice(
+  product: Product,
+  roundingMethod: RoundingMethod = 'floor'
+): number {
+  const price = product.price;
+  const taxRate = product.taxRate;
+
+  // すでに税込価格 → そのまま返す
+  if (product.taxDivision === '0') {
+    return price;
+  }
+
+  // 非課税 → そのまま返す
+  if (product.taxDivision === '2') {
+    return price;
+  }
+
+  // 税抜 → 税込に変換
+  const taxIncluded = price * (1 + taxRate / 100);
+
+  switch (roundingMethod) {
+    case 'floor': return Math.floor(taxIncluded);
+    case 'ceil':  return Math.ceil(taxIncluded);
+    case 'round': return Math.round(taxIncluded);
+    default:      return Math.floor(taxIncluded);
   }
 }
 

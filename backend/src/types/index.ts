@@ -120,6 +120,10 @@ export interface SmaregiProduct {
   groupCode?: string;
   supplierProductNo?: string;
   description?: string;
+  // 税関連フィールド
+  taxDivision?: string;       // 税区分 (0:税込, 1:税抜, 2:非課税)
+  reduceTaxId?: string | null; // 軽減税率ID
+  useCategoryReduceTax?: string; // 部門の軽減税率設定を使用するか
 }
 
 export interface SmaregiCategory {

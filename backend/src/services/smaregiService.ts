@@ -17,6 +17,10 @@ const API_HOST = process.env.SMAREGI_API_HOST || 'https://api.smaregi.dev';
 let cachedToken: string | null = null;
 let tokenExpiresAt: number = 0;
 
+// ─── カテゴリキャッシュ（1時間有効） ───
+let categoryMapCache: Map<string, string> | null = null;
+let categoryMapExpiresAt: number = 0;
+
 /**
  * Client Credentials Grant でアクセストークンを取得
  * トークンは有効期限内であればキャッシュを再利用する
@@ -74,7 +78,37 @@ async function smaregiRequest(path: string, params?: Record<string, string>): Pr
 }
 
 /**
- * 商品一覧を取得（ページネーション対応）
+ * カテゴリ一覧を取得してIDをキーにしたMapを作成（キャッシュ付き）
+ */
+async function getCategoryMap(): Promise<Map<string, string>> {
+  // キャッシュが有効ならそのまま返す
+  if (categoryMapCache && Date.now() < categoryMapExpiresAt) {
+    return categoryMapCache;
+  }
+
+  console.log('[SmaregiService] カテゴリマップを取得中...');
+  
+  const response = await smaregiRequest('/categories/', { limit: '1000' });
+  const categories = response.data;
+  
+  const map = new Map<string, string>();
+  if (Array.isArray(categories)) {
+    categories.forEach((cat: any) => {
+      map.set(String(cat.categoryId), cat.categoryName || '');
+    });
+  }
+
+  // 1時間キャッシュ
+  categoryMapCache = map;
+  categoryMapExpiresAt = Date.now() + 60 * 60 * 1000;
+
+  console.log('[SmaregiService] カテゴリマップ取得完了:', map.size, '件');
+  
+  return map;
+}
+
+/**
+ * 商品一覧を取得（ページネーション対応、カテゴリ名結合）
  */
 export async function getProducts(
   page: number = 1, 
@@ -96,10 +130,15 @@ export async function getProducts(
     queryParams['category_id'] = params.categoryId;
   }
 
-  const response = await smaregiRequest('/products/', queryParams);
+  // 商品とカテゴリマップを並行取得
+  const [response, categoryMap] = await Promise.all([
+    smaregiRequest('/products/', queryParams),
+    getCategoryMap(),
+  ]);
+  
   const data = response.data;
 
-  // スマレジAPIのレスポンスを変換
+  // スマレジAPIのレスポンスを変換（カテゴリ名と税情報を追加）
   const products: SmaregiProduct[] = (Array.isArray(data) ? data : []).map((item: any) => ({
     productId: String(item.productId),
     productCode: item.productCode || '',
@@ -107,10 +146,15 @@ export async function getProducts(
     price: Number(item.price) || 0,
     taxRate: item.taxRate ? Number(item.taxRate) : undefined,
     categoryId: item.categoryId ? String(item.categoryId) : undefined,
-    categoryName: item.categoryName || undefined,
+    // カテゴリ名を結合
+    categoryName: categoryMap.get(String(item.categoryId)) || item.categoryName || '',
     groupCode: item.groupCode || undefined,
     supplierProductNo: item.supplierProductNo || undefined,
     description: item.description || undefined,
+    // 税関連フィールドをパススルー
+    taxDivision: item.taxDivision || '1',
+    reduceTaxId: item.reduceTaxId || null,
+    useCategoryReduceTax: item.useCategoryReduceTax || '0',
   }));
 
   // ページネーション情報を取得（ヘッダーから）
@@ -134,7 +178,10 @@ export async function getProducts(
  */
 export async function getProductById(productId: string): Promise<SmaregiProduct | null> {
   try {
-    const response = await smaregiRequest(`/products/${productId}`);
+    const [response, categoryMap] = await Promise.all([
+      smaregiRequest(`/products/${productId}`),
+      getCategoryMap(),
+    ]);
     const item = response.data;
 
     return {
@@ -144,10 +191,13 @@ export async function getProductById(productId: string): Promise<SmaregiProduct 
       price: Number(item.price) || 0,
       taxRate: item.taxRate ? Number(item.taxRate) : undefined,
       categoryId: item.categoryId ? String(item.categoryId) : undefined,
-      categoryName: item.categoryName || undefined,
+      categoryName: categoryMap.get(String(item.categoryId)) || item.categoryName || '',
       groupCode: item.groupCode || undefined,
       supplierProductNo: item.supplierProductNo || undefined,
       description: item.description || undefined,
+      taxDivision: item.taxDivision || '1',
+      reduceTaxId: item.reduceTaxId || null,
+      useCategoryReduceTax: item.useCategoryReduceTax || '0',
     };
   } catch (error: any) {
     if (error.response?.status === 404) {
@@ -161,7 +211,7 @@ export async function getProductById(productId: string): Promise<SmaregiProduct 
  * カテゴリ一覧を取得
  */
 export async function getCategories(): Promise<SmaregiCategory[]> {
-  const response = await smaregiRequest('/categories/');
+  const response = await smaregiRequest('/categories/', { limit: '1000' });
   const data = response.data;
 
   return (Array.isArray(data) ? data : []).map((item: any) => ({

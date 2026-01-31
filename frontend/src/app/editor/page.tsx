@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, Suspense } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
@@ -24,6 +24,8 @@ import {
   DEFAULT_QRCODE_SETTINGS,
 } from '@/types/editor';
 import { getTemplateById } from '@/types/template';
+import { saveEditorState, loadEditorState, EditorElement as StorageElement } from '@/lib/editorStorage';
+import type { RoundingMethod } from '@/lib/api';
 
 function EditorContent() {
   const searchParams = useSearchParams();
@@ -39,8 +41,35 @@ function EditorContent() {
   const [elements, setElements] = useState<EditorElement[]>([]);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [roundingMethod, setRoundingMethod] = useState<RoundingMethod>('floor');
+  const [isInitialized, setIsInitialized] = useState(false);
 
   const selectedElement = elements.find((el) => el.id === selectedElementId) || null;
+
+  // 初期化時に保存された状態を復元
+  useEffect(() => {
+    const savedState = loadEditorState(templateId);
+    if (savedState) {
+      // 保存された要素を復元（型変換が必要）
+      setElements(savedState.elements as unknown as EditorElement[]);
+      setZoom(savedState.zoom);
+      setRoundingMethod(savedState.roundingMethod);
+      console.log('[editor] 保存された状態を復元しました');
+    }
+    setIsInitialized(true);
+  }, [templateId]);
+
+  // 状態が変更されたら保存（初期化後のみ）
+  useEffect(() => {
+    if (!isInitialized) return;
+    
+    saveEditorState({
+      elements: elements as unknown as StorageElement[],
+      templateId,
+      zoom,
+      roundingMethod,
+    });
+  }, [elements, templateId, zoom, roundingMethod, isInitialized]);
 
   // 要素追加のヘルパー
   const addElement = useCallback((element: EditorElement) => {
@@ -179,7 +208,7 @@ function EditorContent() {
 
   // 次へ（データ選択へ）
   const handleNext = () => {
-    sessionStorage.setItem('templateElements', JSON.stringify(elements));
+    // 状態は自動保存されているので、そのまま遷移
     router.push(`/data-select?template=${templateId}`);
   };
 
@@ -242,6 +271,8 @@ function EditorContent() {
             element={selectedElement}
             onUpdate={handleUpdateElement}
             onDelete={handleDeleteElement}
+            roundingMethod={roundingMethod}
+            onRoundingChange={setRoundingMethod}
           />
         </div>
       </div>

@@ -4,14 +4,23 @@ import { useState } from 'react';
 import { EditorElement, TextElement, ShapeElement, LineElement, BarcodeElement, QRCodeElement, TextStyle, BarcodeSettings, QRCodeSettings } from '@/types/editor';
 import { FONTS } from '@/lib/fonts';
 import PlaceholderMenu from './PlaceholderMenu';
+import type { RoundingMethod } from '@/lib/api';
 
 interface PropertyPanelProps {
   element: EditorElement | null;
   onUpdate: (id: string, updates: Partial<EditorElement>) => void;
   onDelete: (id: string) => void;
+  roundingMethod?: RoundingMethod;
+  onRoundingChange?: (method: RoundingMethod) => void;
 }
 
-export default function PropertyPanel({ element, onUpdate, onDelete }: PropertyPanelProps) {
+export default function PropertyPanel({ 
+  element, 
+  onUpdate, 
+  onDelete,
+  roundingMethod = 'floor',
+  onRoundingChange,
+}: PropertyPanelProps) {
   const [showPlaceholders, setShowPlaceholders] = useState(false);
   const [fontCategory, setFontCategory] = useState<'all' | 'japanese' | 'english'>('all');
 
@@ -42,6 +51,9 @@ export default function PropertyPanel({ element, onUpdate, onDelete }: PropertyP
   };
 
   const filteredFonts = fontCategory === 'all' ? FONTS : FONTS.filter(f => f.category === fontCategory);
+
+  // テキスト要素に{{taxIncludedPrice}}が含まれているかチェック
+  const hasTaxIncludedPrice = element.type === 'text' && element.content?.includes('{{taxIncludedPrice}}');
 
   return (
     <div className="h-full overflow-y-auto">
@@ -74,6 +86,44 @@ export default function PropertyPanel({ element, onUpdate, onDelete }: PropertyP
               </div>
               <textarea value={element.content} onChange={(e) => onUpdate(element.id, { content: e.target.value } as Partial<TextElement>)} className="w-full px-3 py-2 border border-border rounded-lg text-sm resize-none" rows={4} placeholder="文字を入力" />
             </div>
+
+            {/* 税込価格設定（{{taxIncludedPrice}}が含まれている場合のみ表示） */}
+            {hasTaxIncludedPrice && onRoundingChange && (
+              <div className="border-t border-gray-200 pt-3 mt-3">
+                <label className="text-xs text-gray-500 font-medium">税込価格設定</label>
+                
+                {/* 端数処理 */}
+                <div className="mt-2">
+                  <label className="text-xs text-gray-500">端数処理</label>
+                  <div className="flex gap-1 mt-1">
+                    {[
+                      { value: 'floor' as const, label: '切り捨て' },
+                      { value: 'round' as const, label: '四捨五入' },
+                      { value: 'ceil' as const, label: '切り上げ' },
+                    ].map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => onRoundingChange(value)}
+                        className={`
+                          flex-1 py-1 text-xs rounded border transition-colors
+                          ${roundingMethod === value
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}
+                        `}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 税率表示（参考情報） */}
+                <p className="text-xs text-gray-400 mt-2">
+                  ※ 税率は商品データに基づき自動判定されます（8%/10%）
+                </p>
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-medium text-gray-500 block mb-2">フォント</label>
               <div className="flex gap-1 mb-2">
@@ -174,7 +224,6 @@ export default function PropertyPanel({ element, onUpdate, onDelete }: PropertyP
             <div><label className="text-xs font-medium text-gray-500 block mb-2">塗りつぶし色</label><input type="color" value={element.style.fill} onChange={(e) => onUpdate(element.id, { style: { ...element.style, fill: e.target.value } } as Partial<ShapeElement>)} className="w-full h-10 border border-border rounded cursor-pointer" /></div>
             <div><label className="text-xs font-medium text-gray-500 block mb-2">枠線色</label><input type="color" value={element.style.stroke} onChange={(e) => onUpdate(element.id, { style: { ...element.style, stroke: e.target.value } } as Partial<ShapeElement>)} className="w-full h-10 border border-border rounded cursor-pointer" /></div>
             <div><label className="text-xs font-medium text-gray-500 block mb-2">枠線の太さ</label><input type="number" min="0" max="20" value={element.style.strokeWidth} onChange={(e) => onUpdate(element.id, { style: { ...element.style, strokeWidth: parseFloat(e.target.value) || 0 } } as Partial<ShapeElement>)} className="w-full px-3 py-2 border border-border rounded-lg text-sm" /></div>
-            {(element.shapeType === 'rectangle' || element.shapeType === 'roundedRect') && (<div><label className="text-xs font-medium text-gray-500 block mb-2">角の丸み</label><input type="number" min="0" max="50" value={element.style.cornerRadius || 0} onChange={(e) => onUpdate(element.id, { style: { ...element.style, cornerRadius: parseFloat(e.target.value) || 0 } } as Partial<ShapeElement>)} className="w-full px-3 py-2 border border-border rounded-lg text-sm" /></div>)}
           </>
         )}
 

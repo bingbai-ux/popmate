@@ -10,6 +10,9 @@ export interface Product {
   groupCode: string;       // メーカー/仕入れ先コード
   description: string;
   tag?: string;            // タグ（メーカー名として使用）
+  maker: string;           // メーカー名（groupCodeからマッピング）
+  taxDivision: '0' | '1' | '2';  // 税区分 (0:税込, 1:税抜, 2:非課税)
+  taxRate: number;         // 計算済み税率 (8 or 10)
 }
 
 export interface Category {
@@ -45,6 +48,9 @@ export const MOCK_PRODUCTS: Product[] = [
     groupCode: 'SUP001',
     description: '厳選されたオーガニックコーヒー豆',
     tag: 'コーヒーメーカーA',
+    maker: 'コーヒーメーカーA',
+    taxDivision: '1',
+    taxRate: 8,
   },
   {
     productId: '2',
@@ -56,6 +62,9 @@ export const MOCK_PRODUCTS: Product[] = [
     groupCode: 'SUP002',
     description: '香り高い国産緑茶',
     tag: 'お茶メーカーB',
+    maker: 'お茶メーカーB',
+    taxDivision: '1',
+    taxRate: 8,
   },
   {
     productId: '3',
@@ -67,6 +76,9 @@ export const MOCK_PRODUCTS: Product[] = [
     groupCode: 'SUP003',
     description: '保温保冷対応のステンレスタンブラー',
     tag: '雑貨メーカーC',
+    maker: '雑貨メーカーC',
+    taxDivision: '1',
+    taxRate: 10,
   },
   {
     productId: '4',
@@ -78,6 +90,9 @@ export const MOCK_PRODUCTS: Product[] = [
     groupCode: 'SUP003',
     description: '丈夫で大容量のエコバッグ',
     tag: '雑貨メーカーC',
+    maker: '雑貨メーカーC',
+    taxDivision: '1',
+    taxRate: 10,
   },
   {
     productId: '5',
@@ -89,6 +104,9 @@ export const MOCK_PRODUCTS: Product[] = [
     groupCode: 'SUP004',
     description: '天然成分配合のハンドクリーム',
     tag: '化粧品メーカーD',
+    maker: '化粧品メーカーD',
+    taxDivision: '1',
+    taxRate: 10,
   },
   {
     productId: '6',
@@ -100,6 +118,9 @@ export const MOCK_PRODUCTS: Product[] = [
     groupCode: 'SUP004',
     description: '保湿力抜群のリップバーム',
     tag: '化粧品メーカーD',
+    maker: '化粧品メーカーD',
+    taxDivision: '1',
+    taxRate: 10,
   },
   {
     productId: '7',
@@ -111,6 +132,9 @@ export const MOCK_PRODUCTS: Product[] = [
     groupCode: 'SUP005',
     description: '書きやすい罫線入りノート',
     tag: '文具メーカーE',
+    maker: '文具メーカーE',
+    taxDivision: '1',
+    taxRate: 10,
   },
   {
     productId: '8',
@@ -122,6 +146,9 @@ export const MOCK_PRODUCTS: Product[] = [
     groupCode: 'SUP005',
     description: 'なめらかな書き心地のボールペン',
     tag: '文具メーカーE',
+    maker: '文具メーカーE',
+    taxDivision: '1',
+    taxRate: 10,
   },
 ];
 
