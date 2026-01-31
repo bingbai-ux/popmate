@@ -1,19 +1,17 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+
 
 interface SelectionCardProps {
   title: string;
   description: string;
   icon: React.ReactNode;
   href: string;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'tertiary';
 }
 
-const PRIMARY_COLOR = '#2563EB';
-const TEXT_DARK = '#0A1628';
-const TEXT_MUTED = '#6B7280';
+
 
 export default function SelectionCard({
   title,
@@ -23,82 +21,53 @@ export default function SelectionCard({
   variant = 'primary',
 }: SelectionCardProps) {
   const router = useRouter();
-  const [isHovered, setIsHovered] = useState(false);
 
-  const isPrimary = variant === 'primary';
+  const variantStyles = {
+    primary: {
+      card: 'border-primary bg-white hover:bg-primary hover:border-primary',
+      iconBg: 'bg-primary/10 text-primary group-hover:bg-white/20 group-hover:text-white',
+      title: 'text-text-dark group-hover:text-white',
+      desc: 'text-text-muted group-hover:text-white/80',
+      action: 'text-primary group-hover:text-white',
+    },
+    secondary: {
+      card: 'border-gray-200 bg-white hover:border-primary hover:bg-primary/5',
+      iconBg: 'bg-gray-100 text-gray-500 group-hover:bg-primary/10 group-hover:text-primary',
+      title: 'text-text-dark',
+      desc: 'text-text-muted',
+      action: 'text-gray-500 group-hover:text-primary',
+    },
+    tertiary: {
+      card: 'border-dashed border-2 border-gray-300 bg-gray-50 hover:border-primary hover:bg-primary/5',
+      iconBg: 'bg-white text-gray-400 group-hover:bg-primary/10 group-hover:text-primary',
+      title: 'text-text-dark',
+      desc: 'text-text-muted',
+      action: 'text-gray-500 group-hover:text-primary',
+    },
+  };
+
+  const styles = variantStyles[variant];
 
   return (
     <button
       onClick={() => router.push(href)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="w-full p-8 rounded-2xl border-2 transition-all duration-300 text-left flex flex-col items-center"
-      style={{
-        borderColor: isPrimary 
-          ? PRIMARY_COLOR 
-          : isHovered ? PRIMARY_COLOR : 'rgba(37, 99, 235, 0.5)',
-        backgroundColor: isPrimary && isHovered 
-          ? PRIMARY_COLOR 
-          : !isPrimary && isHovered 
-            ? 'rgba(37, 99, 235, 0.05)' 
-            : 'white',
-        color: isPrimary && isHovered ? 'white' : TEXT_DARK,
-        transform: isHovered ? 'scale(1.05)' : 'scale(1)',
-        boxShadow: isHovered 
-          ? isPrimary 
-            ? '0 25px 50px -12px rgba(0, 0, 0, 0.25)' 
-            : '0 10px 15px -3px rgba(0, 0, 0, 0.1)' 
-          : 'none',
-      }}
+      className={`group w-full p-6 rounded-2xl border-2 transition-all duration-300 text-left flex flex-col items-center hover:shadow-lg hover:scale-105 ${styles.card}`}
     >
-      <div
-        className="w-20 h-20 rounded-full flex items-center justify-center mb-6 transition-all duration-300"
-        style={{
-          backgroundColor: isPrimary 
-            ? isHovered ? 'rgba(255, 255, 255, 0.2)' : 'rgba(37, 99, 235, 0.1)'
-            : isHovered ? 'rgba(37, 99, 235, 0.1)' : 'rgba(37, 99, 235, 0.05)',
-          color: isPrimary 
-            ? isHovered ? 'white' : PRIMARY_COLOR
-            : isHovered ? PRIMARY_COLOR : 'rgba(37, 99, 235, 0.7)',
-        }}
-      >
+      <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-all duration-300 ${styles.iconBg}`}>
         {icon}
       </div>
 
-      <h3
-        className="text-xl font-bold mb-2 transition-colors duration-300"
-        style={{
-          color: isPrimary && isHovered ? 'white' : TEXT_DARK,
-        }}
-      >
+      <h3 className={`text-lg font-bold mb-2 text-center transition-colors duration-300 ${styles.title}`}>
         {title}
       </h3>
 
-      <p
-        className="text-sm text-center transition-colors duration-300"
-        style={{
-          color: isPrimary && isHovered ? 'rgba(255, 255, 255, 0.8)' : TEXT_MUTED,
-        }}
-      >
+      <p className={`text-sm text-center transition-colors duration-300 ${styles.desc}`}>
         {description}
       </p>
 
-      <div
-        className="mt-6 flex items-center gap-2 font-medium transition-all duration-300"
-        style={{
-          color: isPrimary 
-            ? isHovered ? 'white' : PRIMARY_COLOR
-            : isHovered ? PRIMARY_COLOR : 'rgba(37, 99, 235, 0.7)',
-        }}
-      >
-        <span>選択する</span>
-        <svg 
-          className="w-5 h-5 transition-transform duration-300" 
-          style={{ transform: isHovered ? 'translateX(4px)' : 'translateX(0)' }}
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24"
-        >
+      <div className={`mt-4 flex items-center gap-2 font-medium transition-all duration-300 ${styles.action}`}>
+        <span className="text-sm">選択する</span>
+        <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </div>

@@ -69,6 +69,7 @@ function EditorContent() {
         zIndex: elements.length,
         src,
         alt: file.name,
+        opacity: 100,
       };
       setElements((prev) => [...prev, newElement]);
       setSelectedElementId(newElement.id);

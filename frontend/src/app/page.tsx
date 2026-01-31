@@ -4,31 +4,28 @@ import Header from '@/components/Header';
 import ProgressBar from '@/components/ProgressBar';
 import SelectionCard from '@/components/SelectionCard';
 
-const TEXT_DARK = '#0A1628';
-const TEXT_MUTED = '#6B7280';
-const BACKGROUND_MUTED = '#EFF6FF';
-const BORDER_COLOR = '#E5E7EB';
+
 
 export default function Home() {
   return (
-    <main className="min-h-screen" style={{ backgroundColor: '#FFFFFF' }}>
+    <main className="min-h-screen bg-background-light">
       <Header />
       <ProgressBar currentStep={1} />
 
       <div className="max-w-5xl mx-auto px-4 py-12">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold mb-4" style={{ color: TEXT_DARK }}>
+          <h2 className="text-3xl font-bold text-text-dark mb-4">
             ポップを作成しましょう
           </h2>
-          <p style={{ color: TEXT_MUTED }}>
-            テンプレートから新規作成するか、保存したデータから編集を再開できます
+          <p className="text-text-muted">
+            テンプレートから新規作成、保存データから編集再開、または新しいテンプレートを作成できます
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           <SelectionCard
             title="テンプレートから選ぶ"
-            description="プライスポップ、A4、A5、A6サイズのテンプレートから選んで新規作成"
+            description="プライスポップ、A4、A5、A6サイズなどのテンプレートから選んで新規作成"
             href="/templates"
             variant="primary"
             icon={
@@ -49,13 +46,23 @@ export default function Home() {
               </svg>
             }
           />
+
+          {/* 新規テンプレートを作成 */}
+          <SelectionCard
+            title="新規テンプレートを作成"
+            description="オリジナルサイズのテンプレートを作成して保存できます"
+            href="/create-template"
+            variant="tertiary"
+            icon={
+              <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+              </svg>
+            }
+          />
         </div>
 
         <div className="mt-16 text-center">
-          <div 
-            className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-full"
-            style={{ color: TEXT_MUTED, backgroundColor: BACKGROUND_MUTED }}
-          >
+          <div className="inline-flex items-center gap-2 text-sm text-text-muted bg-background-muted px-4 py-2 rounded-full">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -64,8 +71,8 @@ export default function Home() {
         </div>
       </div>
 
-      <footer className="mt-auto py-6 border-t" style={{ borderColor: BORDER_COLOR }}>
-        <div className="max-w-7xl mx-auto px-4 text-center text-sm" style={{ color: TEXT_MUTED }}>
+      <footer className="mt-auto py-6 border-t border-border">
+        <div className="max-w-7xl mx-auto px-4 text-center text-sm text-text-muted">
           <p>© 2024 PopMate - ポップメイト</p>
         </div>
       </footer>
