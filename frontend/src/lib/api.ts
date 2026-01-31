@@ -100,7 +100,11 @@ export async function fetchProducts(): Promise<{
       throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
 
-    const data = await res.json();
+    const json = await res.json();
+    console.log('[api] レスポンス:', json);
+
+    // バックエンドのレスポンス形式: { success: true, data: [...] }
+    const data = json.data || json;
     console.log('[api] 取得データ件数:', Array.isArray(data) ? data.length : 'not array');
 
     // スマレジAPIのレスポンスは配列
