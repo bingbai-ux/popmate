@@ -64,7 +64,7 @@ export default function SearchFilters({
 
   return (
     <div className="bg-white rounded-lg border border-border p-4">
-      <div className="flex flex-wrap gap-4 items-end">
+      <div className="flex flex-wrap gap-4">
         {/* キーワード */}
         <div className="flex-1 min-w-[200px]">
           <label className="block text-xs font-medium text-gray-500 mb-1">キーワード検索</label>
@@ -78,8 +78,8 @@ export default function SearchFilters({
           />
         </div>
 
-        {/* カテゴリ - 幅を広げる */}
-        <div className="w-56">
+        {/* カテゴリ */}
+        <div className="w-48">
           <MultiSelectDropdown
             label="カテゴリ"
             options={categoryOptions}
@@ -89,8 +89,8 @@ export default function SearchFilters({
           />
         </div>
 
-        {/* メーカー（= tag） - 幅を広げる */}
-        <div className="w-56">
+        {/* メーカー（= tag） */}
+        <div className="w-48">
           <MultiSelectDropdown
             label="メーカー"
             options={makerOptions}
@@ -100,8 +100,8 @@ export default function SearchFilters({
           />
         </div>
 
-        {/* 仕入先（= groupCode） - 幅を広げる */}
-        <div className="w-56">
+        {/* 仕入先（= groupCode） */}
+        <div className="w-48">
           <MultiSelectDropdown
             label="仕入先"
             options={supplierOptions}
