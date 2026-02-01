@@ -14,10 +14,10 @@ const MOCK_PRODUCTS: Product[] = [
     price: 480,
     categoryId: 'CAT001',
     categoryName: 'パン・ベーカリー',
-    groupCode: 'GRP001',
+    groupCode: 'Aゆうき八百屋',
     description: '国産有機全粒粉100%使用',
-    tag: '自社製造',
-    maker: '自社製造',
+    tag: 'プレスオルタナティブ',
+    maker: 'プレスオルタナティブ',
     taxDivision: '1',
     taxRate: 8,
   },
@@ -28,7 +28,7 @@ const MOCK_PRODUCTS: Product[] = [
     price: 298,
     categoryId: 'CAT002',
     categoryName: '飲料',
-    groupCode: 'GRP002',
+    groupCode: 'Bマルサン',
     description: '有機大豆100%使用の無調整豆乳',
     tag: 'マルサン',
     maker: 'マルサン',
@@ -42,7 +42,7 @@ const MOCK_PRODUCTS: Product[] = [
     price: 580,
     categoryId: 'CAT003',
     categoryName: 'お菓子',
-    groupCode: 'GRP003',
+    groupCode: 'Cピープルツリー',
     description: 'カカオ72% オーガニック',
     tag: 'ピープルツリー',
     maker: 'ピープルツリー',
@@ -51,51 +51,38 @@ const MOCK_PRODUCTS: Product[] = [
   },
 ];
 
-// ─── 税率判定ロジック ───
+// ─── 税率判定 ───
 function determineTaxRate(reduceTaxId: string | null | undefined): number {
-  // 軽減税率ID判定
-  // null/undefined → 標準税率 10%
-  // "10000001" → 軽減税率 8%（食料品など）
-  // "10000003" → 軽減税率 8%（適用する）
-  if (reduceTaxId === '10000001' || reduceTaxId === '10000003') {
-    return 8;
-  }
+  if (reduceTaxId === '10000001' || reduceTaxId === '10000003') return 8;
   return 10;
 }
 
-// ─── スマレジAPIレスポンス → PopMate Product型 変換 ───
+// ─── スマレジ → Product型 変換 ───
+// ★ メーカー = tag（タグ）  /  仕入先 = groupCode（グループコード）
 function transformSmaregiProduct(p: any): Product {
   const taxRate = determineTaxRate(p.reduceTaxId);
-  
   return {
     productId: String(p.productId || ''),
     productCode: String(p.productCode || ''),
     productName: String(p.productName || ''),
     price: Number(p.price) || 0,
     categoryId: String(p.categoryId || ''),
-    categoryName: String(p.categoryName || ''),  // バックエンドが結合済みの値
+    categoryName: String(p.categoryName || ''),
     groupCode: String(p.groupCode || ''),
     description: String(p.description || ''),
-    tag: String(p.supplierProductNo || p.tag || ''),
-    maker: String(p.groupCode || ''),  // groupCode をメーカーにマッピング
+    tag: String(p.tag || ''),
+    maker: String(p.tag || ''),               // ★ メーカー = tag
     taxDivision: (String(p.taxDivision || '1') as '0' | '1' | '2'),
-    taxRate: taxRate,
+    taxRate,
   };
 }
 
 // ─── API関数 ───
 
-/**
- * スマレジ接続テスト
- */
-export async function checkConnection(): Promise<{
-  connected: boolean;
-  message: string;
-}> {
+/** スマレジ接続テスト */
+export async function checkConnection(): Promise<{ connected: boolean; message: string }> {
   try {
-    const res = await fetch(`${API_BASE}/api/auth/smaregi/status`, {
-      cache: 'no-store',
-    });
+    const res = await fetch(`${API_BASE}/api/auth/smaregi/status`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (e: any) {
@@ -104,146 +91,130 @@ export async function checkConnection(): Promise<{
 }
 
 /**
- * 全商品を取得（自動ページネーション）
- * - バックエンドが全ページを自動取得して返す
+ * フィルタ用のメーカー(tag)一覧・仕入先(groupCode)一覧を取得
+ * ドロップダウン表示用
  */
-export async function fetchAllProducts(): Promise<{
+export async function fetchProductFilters(): Promise<{
+  makers: string[];
+  suppliers: string[];
+}> {
+  try {
+    const res = await fetch(`${API_BASE}/api/smaregi/products/filters`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) return { makers: [], suppliers: [] };
+
+    const json = await res.json();
+    const data = json.data || json;
+    return {
+      makers: Array.isArray(data.makers) ? data.makers : [],
+      suppliers: Array.isArray(data.suppliers) ? data.suppliers : [],
+    };
+  } catch {
+    return { makers: [], suppliers: [] };
+  }
+}
+
+/**
+ * 条件付き商品検索（検索ファースト用）
+ */
+export interface SearchFiltersParam {
+  keyword?: string;
+  categoryIds?: string[];
+  groupCodes?: string[];   // 仕入先（グループコード）複数選択
+  tags?: string[];          // メーカー（タグ）複数選択
+}
+
+export async function searchProducts(filters: SearchFiltersParam): Promise<{
   products: Product[];
   source: 'smaregi' | 'mock';
 }> {
   try {
-    console.log('[api] 全商品データ取得中...', `${API_BASE}/api/smaregi/products/all`);
-
-    const res = await fetch(`${API_BASE}/api/smaregi/products/all`, {
-      cache: 'no-store',
-      headers: { 'Accept': 'application/json' },
-    });
-
-    console.log('[api] レスポンスステータス:', res.status);
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    const params = new URLSearchParams();
+    if (filters.keyword) params.set('keyword', filters.keyword);
+    if (filters.categoryIds && filters.categoryIds.length > 0) {
+      params.set('category_ids', filters.categoryIds.join(','));
+    }
+    if (filters.groupCodes && filters.groupCodes.length > 0) {
+      params.set('group_codes', filters.groupCodes.join(','));
+    }
+    if (filters.tags && filters.tags.length > 0) {
+      params.set('tags', filters.tags.join(','));
     }
 
+    const url = `${API_BASE}/api/smaregi/products/search?${params.toString()}`;
+    console.log('[api] 商品検索中...', url);
+
+    const res = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+
     const json = await res.json();
-    console.log('[api] レスポンス総件数:', json.total);
+    console.log('[api] 検索結果:', json.total, '件');
 
     const data = json.data || json;
-    const products = Array.isArray(data)
-      ? data.map(transformSmaregiProduct)
-      : [];
+    const products = Array.isArray(data) ? data.map(transformSmaregiProduct) : [];
 
-    if (products.length === 0) {
-      console.log('[api] スマレジから0件、モックデータを使用');
+    // フィルタなしで0件 → モックにフォールバック
+    const noFilters = !filters.keyword && !filters.tags?.length && !filters.groupCodes?.length && !filters.categoryIds?.length;
+    if (products.length === 0 && noFilters) {
       return { products: MOCK_PRODUCTS, source: 'mock' };
     }
 
     return { products, source: 'smaregi' };
   } catch (error: any) {
-    console.error('[api] スマレジ接続エラー、モックデータを使用:', error.message);
+    console.error('[api] 商品検索エラー:', error.message);
     return { products: MOCK_PRODUCTS, source: 'mock' };
   }
 }
 
-/**
- * 商品一覧を取得（従来のページネーション版、後方互換性のため残す）
- */
-export async function fetchProducts(): Promise<{
-  products: Product[];
-  source: 'smaregi' | 'mock';
-}> {
-  // 全件取得版を呼び出す
-  return fetchAllProducts();
-}
+/** 全商品取得（後方互換） */
+export async function fetchAllProducts() { return searchProducts({}); }
+export async function fetchProducts() { return fetchAllProducts(); }
 
-/**
- * カテゴリ一覧を取得（ID付き、categoryId順ソート済み）
- */
+/** カテゴリ一覧（ID付き、categoryId順ソート済み） */
 export async function fetchCategoriesWithId(): Promise<Category[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/smaregi/categories`, {
-      cache: 'no-store',
-    });
-
+    const res = await fetch(`${API_BASE}/api/smaregi/categories`, { cache: 'no-store' });
     if (!res.ok) return [];
-
     const json = await res.json();
     const data = json.data || json;
-    if (Array.isArray(data)) {
-      return data.map((c: any) => ({
-        categoryId: String(c.categoryId || ''),
-        categoryCode: String(c.categoryCode || ''),
-        categoryName: String(c.categoryName || ''),
-        level: Number(c.level) || 1,
-        parentCategoryId: c.parentCategoryId ? String(c.parentCategoryId) : undefined,
-      }));
-    }
-    return [];
-  } catch {
-    return [];
-  }
+    if (!Array.isArray(data)) return [];
+    return data.map((c: any) => ({
+      categoryId: String(c.categoryId || ''),
+      categoryCode: String(c.categoryCode || ''),
+      categoryName: String(c.categoryName || ''),
+      level: Number(c.level) || 1,
+      parentCategoryId: c.parentCategoryId ? String(c.parentCategoryId) : undefined,
+    }));
+  } catch { return []; }
 }
 
-/**
- * カテゴリ一覧を取得（名前のみ、後方互換性のため残す）
- */
 export async function fetchCategories(): Promise<string[]> {
-  const categories = await fetchCategoriesWithId();
-  return categories.map(c => c.categoryName).filter(Boolean);
+  return (await fetchCategoriesWithId()).map(c => c.categoryName).filter(Boolean);
 }
 
-/**
- * 仕入先一覧を取得（スマレジ仕入先マスタから）
- */
 export async function fetchSuppliers(): Promise<Supplier[]> {
   try {
-    const res = await fetch(`${API_BASE}/api/smaregi/suppliers`, {
-      cache: 'no-store',
-    });
-
+    const res = await fetch(`${API_BASE}/api/smaregi/suppliers`, { cache: 'no-store' });
     if (!res.ok) return [];
-
     const json = await res.json();
     const data = json.data || json;
-    if (Array.isArray(data)) {
-      return data.map((s: any) => ({
-        supplierId: String(s.supplierId || ''),
-        supplierCode: String(s.supplierCode || ''),
-        supplierName: String(s.supplierName || ''),
-      }));
-    }
-    return [];
-  } catch {
-    return [];
-  }
+    if (!Array.isArray(data)) return [];
+    return data.map((s: any) => ({
+      supplierId: String(s.supplierId || ''),
+      supplierCode: String(s.supplierCode || ''),
+      supplierName: String(s.supplierName || ''),
+    }));
+  } catch { return []; }
 }
 
 // ─── 税込価格計算 ───
 export type RoundingMethod = 'floor' | 'ceil' | 'round';
 
-/**
- * 税込価格を計算
- */
-export function calculateTaxIncludedPrice(
-  product: Product,
-  roundingMethod: RoundingMethod = 'floor'
-): number {
-  const price = product.price;
-  const taxRate = product.taxRate;
-
-  // すでに税込価格 → そのまま返す
-  if (product.taxDivision === '0') {
-    return price;
-  }
-
-  // 非課税 → そのまま返す
-  if (product.taxDivision === '2') {
-    return price;
-  }
-
-  // 税抜 → 税込に変換
+export function calculateTaxIncludedPrice(product: Product, roundingMethod: RoundingMethod = 'floor'): number {
+  const { price, taxRate, taxDivision } = product;
+  if (taxDivision === '0' || taxDivision === '2') return price;
   const taxIncluded = price * (1 + taxRate / 100);
-
   switch (roundingMethod) {
     case 'floor': return Math.floor(taxIncluded);
     case 'ceil':  return Math.ceil(taxIncluded);
@@ -252,14 +223,8 @@ export function calculateTaxIncludedPrice(
   }
 }
 
-// ─── 後方互換性のためのエクスポート ───
-// 既存コードが getProducts() や getMockProducts() を呼んでいる場合のため
-
+// ─── 後方互換 ───
 export async function getProducts(): Promise<Product[]> {
-  const { products } = await fetchProducts();
-  return products;
+  return (await fetchProducts()).products;
 }
-
-export function getMockProducts(): Product[] {
-  return MOCK_PRODUCTS;
-}
+export function getMockProducts(): Product[] { return MOCK_PRODUCTS; }

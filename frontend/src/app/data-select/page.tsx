@@ -8,8 +8,8 @@ import ProgressBar from '@/components/ProgressBar';
 import SearchFilters, { SearchFiltersType } from '@/components/data-select/SearchFilters';
 import ProductTable from '@/components/data-select/ProductTable';
 import SelectedProductsSidebar from '@/components/data-select/SelectedProductsSidebar';
-import { Product, Category, Supplier } from '@/types/product';
-import { fetchAllProducts, fetchCategoriesWithId, fetchSuppliers } from '@/lib/api';
+import { Product, Category } from '@/types/product';
+import { searchProducts, fetchCategoriesWithId, fetchProductFilters } from '@/lib/api';
 import { saveSelectedProducts, loadSelectedProducts } from '@/lib/selectedProductsStorage';
 
 function DataSelectContent() {
@@ -17,117 +17,85 @@ function DataSelectContent() {
   const router = useRouter();
   const templateId = searchParams.get('template') || 'price-pop';
 
-  // 商品データの状態
+  // ─── フィルタ用マスタデータ ───
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [makers, setMakers] = useState<string[]>([]);       // メーカー = tag 一覧
+  const [suppliers, setSuppliers] = useState<string[]>([]);  // 仕入先 = groupCode 一覧
+  const [isFiltersLoading, setIsFiltersLoading] = useState(true);
+
+  // ─── 商品データ（検索結果） ───
   const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [dataSource, setDataSource] = useState<'smaregi' | 'mock'>('mock');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  // カテゴリ・仕入先マスタ（APIから取得）
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-
-  // メーカーは商品データのgroupCodeから動的に抽出
-  const makers = [...new Set(allProducts.map(p => p.groupCode).filter(Boolean))] as string[];
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const selectedProducts = allProducts.filter(p => selectedIds.includes(p.productId));
 
-  // 初回マウント時にカテゴリ・仕入先・商品データを並行取得
+  // ─── 初回マウント: カテゴリ＋メーカー＋仕入先の一覧を取得 ───
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
+    const loadFilters = async () => {
+      setIsFiltersLoading(true);
       try {
-        // カテゴリ・仕入先・商品を並行取得
-        const [categoriesResult, suppliersResult, productsResult] = await Promise.all([
+        // カテゴリとフィルタ(メーカー/仕入先)を並行取得
+        const [categoriesResult, filtersResult] = await Promise.all([
           fetchCategoriesWithId(),
-          fetchSuppliers(),
-          fetchAllProducts(),
+          fetchProductFilters(),
         ]);
 
-        // カテゴリ設定（categoryId順でソート済み）
         setCategories(categoriesResult);
-        console.log(`[data-select] ${categoriesResult.length}件のカテゴリを取得`);
+        setMakers(filtersResult.makers);
+        setSuppliers(filtersResult.suppliers);
 
-        // 仕入先設定
-        setSuppliers(suppliersResult);
-        console.log(`[data-select] ${suppliersResult.length}件の仕入先を取得`);
-
-        // 商品設定
-        setAllProducts(productsResult.products);
-        setFilteredProducts(productsResult.products);
-        setDataSource(productsResult.source);
-        console.log(`[data-select] ${productsResult.products.length}件の商品を${productsResult.source}から取得`);
-
-        // 保存された選択商品を復元
-        const savedProducts = loadSelectedProducts(templateId);
-        if (savedProducts && savedProducts.length > 0) {
-          const savedIds = savedProducts.map(p => p.productId);
-          // 取得した商品データに存在するIDのみ復元
-          const validIds = savedIds.filter(id => 
-            productsResult.products.some(p => p.productId === id)
-          );
-          setSelectedIds(validIds);
-          console.log(`[data-select] ${validIds.length}件の選択商品を復元`);
-        }
+        console.log(`[data-select] フィルタ取得完了: カテゴリ${categoriesResult.length}件, メーカー${filtersResult.makers.length}件, 仕入先${filtersResult.suppliers.length}件`);
       } catch (e: any) {
-        console.error('[data-select] データ取得エラー:', e.message);
+        console.error('[data-select] フィルタ取得エラー:', e.message);
       } finally {
-        setIsLoading(false);
-        setIsInitialized(true);
+        setIsFiltersLoading(false);
       }
     };
-    loadData();
+    loadFilters();
+
+    // 保存された選択商品IDを復元
+    const savedProducts = loadSelectedProducts(templateId);
+    if (savedProducts && savedProducts.length > 0) {
+      setSelectedIds(savedProducts.map(p => p.productId));
+    }
   }, [templateId]);
 
-  // 選択商品が変更されたら保存（初期化後のみ）
+  // ─── 選択商品の自動保存 ───
   useEffect(() => {
-    if (!isInitialized) return;
-    
+    if (!hasSearched && selectedIds.length === 0) return;
     const productsToSave = allProducts.filter(p => selectedIds.includes(p.productId));
-    saveSelectedProducts(productsToSave, templateId);
-  }, [selectedIds, allProducts, templateId, isInitialized]);
+    if (productsToSave.length > 0) {
+      saveSelectedProducts(productsToSave, templateId);
+    }
+  }, [selectedIds, allProducts, templateId, hasSearched]);
 
-  // 検索実行
-  const handleSearch = useCallback((filters: SearchFiltersType) => {
+  // ─── 検索実行 ───
+  const handleSearch = useCallback(async (filters: SearchFiltersType) => {
     setIsLoading(true);
-    
-    setTimeout(() => {
-      let filtered = [...allProducts];
+    setHasSearched(true);
 
-      if (filters.keyword) {
-        const kw = filters.keyword.toLowerCase();
-        filtered = filtered.filter(p =>
-          p.productName.toLowerCase().includes(kw) ||
-          p.productCode.toLowerCase().includes(kw) ||
-          p.description.toLowerCase().includes(kw)
-        );
-      }
+    try {
+      const result = await searchProducts({
+        keyword: filters.keyword || undefined,
+        categoryIds: filters.categoryIds.length > 0 ? filters.categoryIds : undefined,
+        tags: filters.makerIds.length > 0 ? filters.makerIds : undefined,
+        groupCodes: filters.supplierIds.length > 0 ? filters.supplierIds : undefined,
+      });
 
-      if (filters.categoryIds.length > 0) {
-        // カテゴリIDでフィルタ
-        filtered = filtered.filter(p => filters.categoryIds.includes(p.categoryId));
-      }
-
-      if (filters.makerIds.length > 0) {
-        // メーカー（groupCode）でフィルタ
-        filtered = filtered.filter(p => p.groupCode && filters.makerIds.includes(p.groupCode));
-      }
-
-      if (filters.supplierIds.length > 0) {
-        // 仕入先IDでフィルタ（supplierIdを使用）
-        // 注: 商品データに仕入先IDがない場合はスキップ
-        // 現状は仕入先フィルタは商品データとの紐付けがないため無効
-        // TODO: 商品データに仕入先IDが追加されたら有効化
-      }
-
-      setFilteredProducts(filtered);
+      setAllProducts(result.products);
+      setDataSource(result.source);
+      console.log(`[data-select] 検索結果: ${result.products.length}件 (${result.source})`);
+    } catch (e: any) {
+      console.error('[data-select] 検索エラー:', e.message);
+    } finally {
       setIsLoading(false);
-    }, 300);
-  }, [allProducts]);
+    }
+  }, []);
 
-  // 商品選択
+  // ─── 選択操作 ───
   const handleToggleSelect = useCallback((productId: string) => {
     setSelectedIds(prev =>
       prev.includes(productId)
@@ -137,14 +105,14 @@ function DataSelectContent() {
   }, []);
 
   const handleSelectAll = useCallback(() => {
-    const allIds = filteredProducts.map(p => p.productId);
+    const allIds = allProducts.map(p => p.productId);
     const allSelected = allIds.every(id => selectedIds.includes(id));
     if (allSelected) {
       setSelectedIds(prev => prev.filter(id => !allIds.includes(id)));
     } else {
       setSelectedIds(prev => [...new Set([...prev, ...allIds])]);
     }
-  }, [filteredProducts, selectedIds]);
+  }, [allProducts, selectedIds]);
 
   const handleRemoveSelected = useCallback((productId: string) => {
     setSelectedIds(prev => prev.filter(id => id !== productId));
@@ -159,12 +127,12 @@ function DataSelectContent() {
       alert('商品を1つ以上選択してください');
       return;
     }
-    // 選択商品は自動保存されているので、そのまま遷移
     router.push(`/edit?template=${templateId}`);
   };
 
   return (
     <>
+      {/* ヘッダーバー */}
       <div className="bg-white border-b border-border px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href={`/editor?template=${templateId}`} className="flex items-center gap-2 text-gray-600 hover:text-primary transition-colors">
@@ -173,14 +141,14 @@ function DataSelectContent() {
             </svg>
             <span className="text-sm">デザイン編集に戻る</span>
           </Link>
-          {/* データソース表示 */}
           <span className={`text-xs px-2 py-1 rounded ${dataSource === 'smaregi' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
             {dataSource === 'smaregi' ? 'スマレジ連携中' : 'サンプルデータ'}
           </span>
-          {/* 商品件数表示 */}
-          <span className="text-xs text-gray-500">
-            全{allProducts.length}件
-          </span>
+          {hasSearched && (
+            <span className="text-xs text-gray-500">
+              検索結果: {allProducts.length}件
+            </span>
+          )}
         </div>
         <button
           onClick={handleNext}
@@ -195,8 +163,10 @@ function DataSelectContent() {
         </button>
       </div>
 
+      {/* メインコンテンツ */}
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden">
+          {/* 検索フィルタ */}
           <div className="p-4">
             <SearchFilters
               categories={categories}
@@ -204,17 +174,33 @@ function DataSelectContent() {
               suppliers={suppliers}
               onSearch={handleSearch}
               isLoading={isLoading}
+              isFiltersLoading={isFiltersLoading}
+              hasSearched={hasSearched}
             />
           </div>
 
+          {/* 商品テーブル */}
           <div className="flex-1 overflow-auto px-4 pb-4">
-            <ProductTable
-              products={filteredProducts}
-              selectedIds={selectedIds}
-              onToggleSelect={handleToggleSelect}
-              onSelectAll={handleSelectAll}
-              isLoading={isLoading}
-            />
+            {!hasSearched && !isLoading ? (
+              <div className="bg-white rounded-lg border border-border p-12 text-center">
+                <svg className="w-16 h-16 text-gray-200 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <p className="text-gray-400 text-lg mb-2">商品を検索してください</p>
+                <p className="text-gray-400 text-sm">
+                  カテゴリ・メーカー・仕入先を選択して<br />
+                  「検索」ボタンを押すと商品データを取得します
+                </p>
+              </div>
+            ) : (
+              <ProductTable
+                products={allProducts}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onSelectAll={handleSelectAll}
+                isLoading={isLoading}
+              />
+            )}
           </div>
         </div>
 

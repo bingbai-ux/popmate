@@ -67,6 +67,7 @@ export default function ProductTable({
             <th className="px-4 py-3 text-left text-sm font-bold">商品名</th>
             <th className="px-4 py-3 text-left text-sm font-bold">カテゴリ</th>
             <th className="px-4 py-3 text-left text-sm font-bold">メーカー</th>
+            <th className="px-4 py-3 text-left text-sm font-bold">仕入先</th>
             <th className="px-4 py-3 text-right text-sm font-bold">価格</th>
           </tr>
         </thead>
@@ -105,7 +106,10 @@ export default function ProductTable({
                   {product.categoryName}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">
-                  {product.tag || '-'}
+                  {product.maker || product.tag || '-'}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600">
+                  {product.groupCode || '-'}
                 </td>
                 <td className="px-4 py-3 text-sm font-medium text-right text-text-dark">
                   {formatPrice(product.price)}

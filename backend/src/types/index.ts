@@ -117,7 +117,8 @@ export interface SmaregiProduct {
   taxRate?: number;
   categoryId?: string;
   categoryName?: string;
-  groupCode?: string;
+  groupCode?: string;        // グループコード → 仕入先
+  tag?: string;              // タグ → メーカー
   supplierProductNo?: string;
   description?: string;
   // 税関連フィールド

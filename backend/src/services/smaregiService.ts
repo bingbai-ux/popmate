@@ -256,6 +256,7 @@ export async function getProducts(
     // カテゴリ名を結合
     categoryName: categoryMap.get(String(item.categoryId)) || item.categoryName || '',
     groupCode: item.groupCode || undefined,
+    tag: item.tag || undefined,
     supplierProductNo: item.supplierProductNo || undefined,
     description: item.description || undefined,
     // 税関連フィールドをパススルー
@@ -301,6 +302,7 @@ export async function getAllProducts(): Promise<SmaregiProduct[]> {
       categoryId: item.categoryId ? String(item.categoryId) : undefined,
       categoryName: categoryMap.get(String(item.categoryId)) || item.categoryName || '',
       groupCode: item.groupCode || undefined,
+      tag: item.tag || undefined,
       supplierProductNo: item.supplierProductNo || undefined,
       description: item.description || undefined,
       taxDivision: item.taxDivision || '1',
@@ -310,6 +312,132 @@ export async function getAllProducts(): Promise<SmaregiProduct[]> {
   );
 
   console.log('[SmaregiService] 全商品取得完了:', products.length, '件');
+  return products;
+}
+
+/**
+ * 商品フィルタ用のメーカー(tag)一覧・仕入先(groupCode)一覧を取得
+ * 全商品を走査して一意な値を抽出する
+ * 5分間キャッシュ（フィルタ選択肢は頻繁に変わらないため）
+ */
+let filtersCache: { makers: string[]; suppliers: string[] } | null = null;
+let filtersCacheExpiresAt: number = 0;
+
+export async function getProductFilters(): Promise<{ makers: string[]; suppliers: string[] }> {
+  // キャッシュが有効ならそのまま返す
+  if (filtersCache && Date.now() < filtersCacheExpiresAt) {
+    console.log('[SmaregiService] フィルタキャッシュ使用');
+    return filtersCache;
+  }
+
+  console.log('[SmaregiService] フィルタ一覧を取得中（全商品走査）...');
+
+  const makersSet = new Set<string>();
+  const suppliersSet = new Set<string>();
+
+  // 全商品を走査して tag / groupCode を収集
+  await fetchAllPages<void>(
+    '/products/',
+    {},
+    (item: any) => {
+      if (item.tag) makersSet.add(item.tag);
+      if (item.groupCode) suppliersSet.add(item.groupCode);
+    }
+  );
+
+  const makers = [...makersSet].sort((a, b) => a.localeCompare(b, 'ja'));
+  const suppliers = [...suppliersSet].sort((a, b) => a.localeCompare(b, 'ja'));
+
+  filtersCache = { makers, suppliers };
+  filtersCacheExpiresAt = Date.now() + 5 * 60 * 1000; // 5分キャッシュ
+
+  console.log(`[SmaregiService] フィルタ取得完了: メーカー${makers.length}件, 仕入先${suppliers.length}件`);
+  return filtersCache;
+}
+
+/**
+ * 条件付き商品検索（検索ファースト用）
+ * - categoryIds: カテゴリIDで絞り込み（スマレジAPI直接）
+ * - tags: メーカー（タグ値）で絞り込み（複数選択可、サーバーサイドフィルタ）
+ * - groupCodes: 仕入先（グループコード値）で絞り込み（複数選択可、サーバーサイドフィルタ）
+ * - keyword: 商品名/コード/説明でキーワード絞り込み
+ */
+export async function searchProducts(params: {
+  keyword?: string;
+  categoryIds?: string[];
+  groupCodes?: string[];
+  tags?: string[];
+} = {}): Promise<SmaregiProduct[]> {
+  console.log('[SmaregiService] 商品検索:', params);
+
+  const categoryMap = await getCategoryMap();
+
+  const baseParams: Record<string, string> = {};
+  if (params.keyword) baseParams['productName'] = params.keyword;
+
+  const transformProduct = (item: any): SmaregiProduct => ({
+    productId: String(item.productId),
+    productCode: item.productCode || '',
+    productName: item.productName || '',
+    price: Number(item.price) || 0,
+    taxRate: item.taxRate ? Number(item.taxRate) : undefined,
+    categoryId: item.categoryId ? String(item.categoryId) : undefined,
+    categoryName: categoryMap.get(String(item.categoryId)) || item.categoryName || '',
+    groupCode: item.groupCode || undefined,
+    tag: item.tag || undefined,
+    supplierProductNo: item.supplierProductNo || undefined,
+    description: item.description || undefined,
+    taxDivision: item.taxDivision || '1',
+    reduceTaxId: item.reduceTaxId || null,
+    useCategoryReduceTax: item.useCategoryReduceTax || '0',
+  });
+
+  let products: SmaregiProduct[];
+
+  // カテゴリが選択されている場合: カテゴリごとに並列取得→マージ
+  if (params.categoryIds && params.categoryIds.length > 0) {
+    const results = await Promise.all(
+      params.categoryIds.map(catId =>
+        fetchAllPages<SmaregiProduct>(
+          '/products/',
+          { ...baseParams, categoryId: catId },
+          transformProduct
+        )
+      )
+    );
+    const seen = new Set<string>();
+    products = results.flat().filter(p => {
+      if (seen.has(p.productId)) return false;
+      seen.add(p.productId);
+      return true;
+    });
+  } else {
+    products = await fetchAllPages<SmaregiProduct>(
+      '/products/',
+      baseParams,
+      transformProduct
+    );
+  }
+
+  // サーバーサイドフィルタ
+  if (params.keyword) {
+    const kw = params.keyword.toLowerCase();
+    products = products.filter(p =>
+      p.productName.toLowerCase().includes(kw) ||
+      p.productCode.toLowerCase().includes(kw) ||
+      (p.description || '').toLowerCase().includes(kw)
+    );
+  }
+  if (params.groupCodes && params.groupCodes.length > 0) {
+    const gcSet = new Set(params.groupCodes);
+    products = products.filter(p => p.groupCode && gcSet.has(p.groupCode));
+  }
+  if (params.tags && params.tags.length > 0) {
+    const tagSet = new Set(params.tags);
+    products = products.filter(p => p.tag && tagSet.has(p.tag));
+  }
+
+  console.log('[SmaregiService] 検索結果:', products.length, '件');
   return products;
 }
 
@@ -333,6 +461,7 @@ export async function getProductById(productId: string): Promise<SmaregiProduct 
       categoryId: item.categoryId ? String(item.categoryId) : undefined,
       categoryName: categoryMap.get(String(item.categoryId)) || item.categoryName || '',
       groupCode: item.groupCode || undefined,
+      tag: item.tag || undefined,
       supplierProductNo: item.supplierProductNo || undefined,
       description: item.description || undefined,
       taxDivision: item.taxDivision || '1',
