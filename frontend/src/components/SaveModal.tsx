@@ -69,6 +69,7 @@ export function SaveModal({
       return;
     }
     setError('');
+    console.log('[SaveModal] ★ onSave called:', { name: name.trim(), saveType });
     onSave(name.trim(), saveType);
   };
 

@@ -46,6 +46,7 @@ export async function saveProject(data: {
     editedProductData: {},
   };
 
+  console.log('[projectStorage] ★ saving project:', { id: project.id, name: project.name, saveType: project.saveType });
   await db.projects.put(project);
 }
 

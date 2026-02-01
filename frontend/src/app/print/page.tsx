@@ -154,6 +154,7 @@ function PrintContent() {
 
   // --- 保存処理 ---
   const handleSave = async (name: string, saveType: SaveType) => {
+    console.log('[save] ★ handleSave called:', { name, saveType });
     setIsSaving(true);
     try {
       const projectId = currentProjectId || generateProjectId();

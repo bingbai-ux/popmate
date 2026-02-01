@@ -22,7 +22,13 @@ export default function SavedPage() {
     setIsLoading(true);
     try {
       const data = await getProjects({ sortBy: 'updatedAt', sortOrder: 'desc' });
-      setProjects(data);
+      // saveType が未定義の古いレコードを正規化
+      const normalized = data.map(p => ({
+        ...p,
+        saveType: p.saveType || ('project' as const),
+      }));
+      console.log('[saved] ★ loaded projects:', normalized.map(p => ({ id: p.id, name: p.name, saveType: p.saveType })));
+      setProjects(normalized);
     } catch (error) {
       console.error('Failed to load projects:', error);
     } finally {
@@ -36,14 +42,15 @@ export default function SavedPage() {
 
   // タブで絞り込まれたリスト
   const filteredProjects = projects.filter(p => {
+    const type = p.saveType || 'project';
     if (activeTab === 'all') return true;
-    if (activeTab === 'template') return p.saveType === 'template';
-    if (activeTab === 'project') return p.saveType !== 'template';
+    if (activeTab === 'template') return type === 'template';
+    if (activeTab === 'project') return type === 'project';
     return true;
   });
 
-  const templateCount = projects.filter(p => p.saveType === 'template').length;
-  const projectCount = projects.filter(p => p.saveType !== 'template').length;
+  const templateCount = projects.filter(p => (p.saveType || 'project') === 'template').length;
+  const projectCount = projects.filter(p => (p.saveType || 'project') === 'project').length;
 
   // テンプレート選択 → エディター画面（Step 2）から開始
   const handleSelectTemplate = (project: SavedProject) => {

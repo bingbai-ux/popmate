@@ -10,7 +10,7 @@ interface ProjectCardProps {
 }
 
 export default function ProjectCard({ project, onSelect, onDelete, onDuplicate }: ProjectCardProps) {
-  const isTemplate = project.saveType === 'template';
+  const isTemplate = (project.saveType || 'project') === 'template';
 
   const formatDate = (date: Date) => {
     const d = new Date(date);
