@@ -56,6 +56,7 @@ export function ProductDataTable({
   const handleResizeMove = useCallback((e: React.MouseEvent) => {
     if (!resizing) return;
     const diff = e.clientX - resizing.startX;
+    // 最小幅60pxのみ、最大幅制限なし
     const newWidth = Math.max(60, resizing.startWidth + diff);
     setColumnWidths(prev => ({
       ...prev,

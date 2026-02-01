@@ -21,8 +21,10 @@ export default function TextElement({
   onUpdate,
 }: TextElementProps) {
   const elementRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);  // ★ インライン編集モード
   const [resizeDirection, setResizeDirection] = useState<ResizeDirection | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0, posX: 0, posY: 0 });
@@ -31,8 +33,38 @@ export default function TextElement({
   const mmToPx = useCallback((mm: number) => mm * 3.78 * scale, [scale]);
   const pxToMm = useCallback((px: number) => px / (3.78 * scale), [scale]);
 
+  // ★ ダブルクリックで編集モードに入る
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsEditing(true);
+    setIsDragging(false);
+  };
+
+  // ★ 編集モード開始時にフォーカス
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  // ★ 編集完了（フォーカスアウト or Escape）
+  const handleBlur = () => {
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setIsEditing(false);
+    }
+    // Enterで改行（Shift+Enterも改行）
+    // 編集終了はフォーカスアウトで
+  };
+
   // ドラッグ開始
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (isEditing) return;  // 編集中はドラッグしない
     e.stopPropagation();
     onSelect();
     setIsDragging(true);
@@ -192,6 +224,19 @@ export default function TextElement({
     height: '100%',
   };
 
+  // ★ 編集用textareaのスタイル
+  const editTextareaStyle: React.CSSProperties = {
+    ...textStyle,
+    width: '100%',
+    height: '100%',
+    background: 'rgba(255, 255, 255, 0.95)',
+    border: '2px solid #3b82f6',
+    borderRadius: '2px',
+    padding: '2px',
+    resize: 'none',
+    outline: 'none',
+  };
+
   return (
     <div
       ref={elementRef}
@@ -202,19 +247,36 @@ export default function TextElement({
         width: mmToPx(element.size.width),
         height: mmToPx(element.size.height),
         zIndex: element.zIndex,
-        cursor: isDragging ? 'grabbing' : 'grab',
-        userSelect: 'none',
+        cursor: isEditing ? 'text' : isDragging ? 'grabbing' : 'grab',
+        userSelect: isEditing ? 'text' : 'none',
       }}
       onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
     >
-      <div style={containerStyle}>
-        <div style={textStyle}>
-          {element.content || 'テキストを入力'}
+      {isEditing ? (
+        // ★ 編集モード: textarea表示
+        <textarea
+          ref={inputRef}
+          value={element.content}
+          onChange={(e) => onUpdate({ content: e.target.value })}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          style={editTextareaStyle}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        // 表示モード
+        <div style={containerStyle}>
+          <div style={textStyle}>
+            {element.content || (
+              <span className="text-gray-400 italic">ダブルクリックで編集</span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
       
-      {/* 選択時のリサイズハンドル */}
-      {isSelected && (
+      {/* 選択時のリサイズハンドル（編集中は非表示） */}
+      {isSelected && !isEditing && (
         <>
           {/* 四隅のハンドル */}
           <div 

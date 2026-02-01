@@ -7,6 +7,7 @@ import Header from '@/components/Header';
 import ProgressBar from '@/components/ProgressBar';
 import PreviewCanvas from '@/components/edit/PreviewCanvas';
 import { ProductDataTable } from '@/components/edit/ProductDataTable';
+import { ResizableSplit } from '@/components/ui/ResizableSplit';
 import PrintPreviewModal from '@/components/edit/PrintPreviewModal';
 import { Product } from '@/types/product';
 import {
@@ -196,36 +197,42 @@ function EditContent() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* 上部: プレビュー */}
-          <div className="p-6 border-b border-border bg-white/50">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-sm text-text-dark">プレビュー</h3>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span>←→ 商品テーブルの行をクリックで切替</span>
+        <ResizableSplit
+          className="flex-1 overflow-hidden"
+          direction="vertical"
+          initialRatio={45}
+          minRatio={25}
+          maxRatio={75}
+          topContent={
+            <div className="h-full p-6 bg-white/50">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-sm text-text-dark">プレビュー</h3>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>←→ 商品テーブルの行をクリックで切替</span>
+                </div>
               </div>
+              <PreviewCanvas
+                template={template}
+                elements={elements}
+                product={selectedProduct}
+                taxSettings={taxSettings}
+                zoom={1.5}
+              />
             </div>
-            <PreviewCanvas
-              template={template}
-              elements={elements}
-              product={selectedProduct}
-              taxSettings={taxSettings}
-              zoom={1.5}
-            />
-          </div>
-
-          {/* 下部: 商品テーブル（変数連動 & 列リサイズ対応） */}
-          <div className="flex-1 p-6 overflow-auto">
-            <ProductDataTable
-              products={products}
-              elements={elements}
-              currentIndex={currentProductIndex}
-              onSelectProduct={handleSelectProduct}
-              roundingMethod={taxSettings.roundingMode}
-              onEditProduct={handleEditProduct}
-            />
-          </div>
-        </div>
+          }
+          bottomContent={
+            <div className="h-full p-6 overflow-auto">
+              <ProductDataTable
+                products={products}
+                elements={elements}
+                currentIndex={currentProductIndex}
+                onSelectProduct={handleSelectProduct}
+                roundingMethod={taxSettings.roundingMode}
+                onEditProduct={handleEditProduct}
+              />
+            </div>
+          }
+        />
       )}
 
       {/* 印刷プレビューモーダル */}

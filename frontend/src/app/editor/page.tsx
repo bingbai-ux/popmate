@@ -249,7 +249,7 @@ function EditorContent() {
       size: { width: 50, height: 15 },
       rotation: 0,
       zIndex: elements.length + 1,
-      content: 'テキスト',
+      content: '',  // ★ 空文字列（「テキスト」を入れない）
       style: { ...DEFAULT_TEXT_STYLE },
     };
     addElement(newElement);
@@ -426,8 +426,14 @@ function EditorContent() {
           <div className="text-xs text-gray-400 hidden lg:block">
             矢印: 0.1mm | Shift+矢印: 1mm | Ctrl+Z: 戻す | Ctrl+C/V: コピー
           </div>
-          <button onClick={handleNext} className="btn-primary text-sm py-2">
+          <button
+            onClick={handleNext}
+            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
+          >
             次へ：商品データ選択
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </button>
         </div>
       </div>

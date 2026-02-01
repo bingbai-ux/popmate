@@ -200,9 +200,83 @@ export default function PropertyPanel({
 
         {element.type === 'barcode' && (
           <>
-            <div><label className="text-xs font-medium text-gray-500 block mb-2">バーコード形式</label><select value={element.settings.format} onChange={(e) => onUpdate(element.id, { settings: { ...element.settings, format: e.target.value as BarcodeSettings['format'] } } as Partial<BarcodeElement>)} className="w-full px-3 py-2 border border-border rounded-lg text-sm"><option value="CODE128">CODE128</option><option value="EAN13">EAN-13 (JAN)</option><option value="EAN8">EAN-8</option><option value="UPC">UPC</option><option value="CODE39">CODE39</option></select></div>
-            <div><label className="text-xs font-medium text-gray-500 block mb-2">値</label><input type="text" value={element.settings.value} onChange={(e) => onUpdate(element.id, { settings: { ...element.settings, value: e.target.value } } as Partial<BarcodeElement>)} placeholder="{{productCode}} または数値" className="w-full px-3 py-2 border border-border rounded-lg text-sm" /></div>
-            <div><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={element.settings.displayValue} onChange={(e) => onUpdate(element.id, { settings: { ...element.settings, displayValue: e.target.checked } } as Partial<BarcodeElement>)} className="w-4 h-4" /><span>数値を表示</span></label></div>
+            {/* バーコード形式 */}
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-2">バーコード形式</label>
+              <select
+                value={element.settings.format}
+                onChange={(e) => onUpdate(element.id, { settings: { ...element.settings, format: e.target.value as BarcodeSettings['format'] } } as Partial<BarcodeElement>)}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+              >
+                <option value="CODE128">CODE128</option>
+                <option value="EAN13">EAN-13 (JAN)</option>
+                <option value="EAN8">EAN-8</option>
+                <option value="UPC">UPC</option>
+                <option value="CODE39">CODE39</option>
+                <option value="ITF14">ITF-14</option>
+              </select>
+            </div>
+
+            {/* 値 */}
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-2">値</label>
+              <input
+                type="text"
+                value={element.settings.value}
+                onChange={(e) => onUpdate(element.id, { settings: { ...element.settings, value: e.target.value } } as Partial<BarcodeElement>)}
+                placeholder="{{productCode}} または数値"
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-1">変数: {'{'}{'{'}商品コード{'}'}{'}'} など</p>
+            </div>
+
+            {/* 数値表示 */}
+            <div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={element.settings.displayValue}
+                  onChange={(e) => onUpdate(element.id, { settings: { ...element.settings, displayValue: e.target.checked } } as Partial<BarcodeElement>)}
+                  className="w-4 h-4"
+                />
+                <span>数値を表示</span>
+              </label>
+            </div>
+
+            {/* 数値フォントサイズ */}
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-2">数値フォントサイズ</label>
+              <input
+                type="number"
+                min="6"
+                max="24"
+                value={element.settings.fontSize}
+                onChange={(e) => onUpdate(element.id, { settings: { ...element.settings, fontSize: parseInt(e.target.value) || 12 } } as Partial<BarcodeElement>)}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+              />
+            </div>
+
+            {/* バーコード色 */}
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-2">バーコード色</label>
+              <input
+                type="color"
+                value={element.settings.lineColor}
+                onChange={(e) => onUpdate(element.id, { settings: { ...element.settings, lineColor: e.target.value } } as Partial<BarcodeElement>)}
+                className="w-full h-10 border border-border rounded cursor-pointer"
+              />
+            </div>
+
+            {/* 背景色 */}
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-2">背景色</label>
+              <input
+                type="color"
+                value={element.settings.background}
+                onChange={(e) => onUpdate(element.id, { settings: { ...element.settings, background: e.target.value } } as Partial<BarcodeElement>)}
+                className="w-full h-10 border border-border rounded cursor-pointer"
+              />
+            </div>
           </>
         )}
 
