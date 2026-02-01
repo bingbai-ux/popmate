@@ -1,19 +1,23 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { SaveType } from '@/types/project';
 
 interface SaveModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (name: string) => void;
+  onSave: (name: string, saveType: SaveType) => void;
   defaultName?: string;
   isLoading?: boolean;
   isOverwrite?: boolean;
   isSaving?: boolean;
+  /** 上書き時は保存タイプ変更不可 */
+  currentSaveType?: SaveType;
+  productCount?: number;
 }
 
 /**
- * 保存モーダル（タイトル入力）
+ * 保存モーダル（タイプ選択＋タイトル入力）
  */
 export function SaveModal({
   isOpen,
@@ -23,31 +27,30 @@ export function SaveModal({
   isLoading = false,
   isOverwrite = false,
   isSaving = false,
+  currentSaveType,
+  productCount = 0,
 }: SaveModalProps) {
   const [name, setName] = useState(defaultName);
+  const [saveType, setSaveType] = useState<SaveType>(currentSaveType || 'project');
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 実際のローディング状態
   const loading = isLoading || isSaving;
 
-  // モーダルが開いたときにフォーカス
   useEffect(() => {
     if (isOpen && inputRef.current) {
       setName(defaultName);
+      if (currentSaveType) setSaveType(currentSaveType);
       setTimeout(() => {
         inputRef.current?.focus();
         inputRef.current?.select();
       }, 100);
     }
-  }, [isOpen, defaultName]);
+  }, [isOpen, defaultName, currentSaveType]);
 
-  // Escキーで閉じる
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
+      if (e.key === 'Escape' && isOpen) onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -57,39 +60,30 @@ export function SaveModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!name.trim()) {
-      setError('プロジェクト名を入力してください');
+      setError('名前を入力してください');
       return;
     }
-
     if (name.length > 50) {
-      setError('プロジェクト名は50文字以内で入力してください');
+      setError('名前は50文字以内で入力してください');
       return;
     }
-
     setError('');
-    onSave(name.trim());
+    onSave(name.trim(), saveType);
   };
+
+  const canSelectType = !isOverwrite;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* オーバーレイ */}
-      <div 
-        className="absolute inset-0 bg-black/50"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
-      {/* モーダル */}
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6">
+        <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl font-bold text-gray-800">
-            {isOverwrite ? '上書き保存' : 'プロジェクトを保存'}
+            {isOverwrite ? '上書き保存' : 'データを保存'}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -97,31 +91,129 @@ export function SaveModal({
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="mb-6">
+          {/* 保存タイプ選択 */}
+          {canSelectType && (
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-gray-700 mb-2">保存タイプ</label>
+              <div className="grid grid-cols-2 gap-3">
+                {/* テンプレート保存 */}
+                <button
+                  type="button"
+                  onClick={() => setSaveType('template')}
+                  className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                    saveType === 'template'
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  {saveType === 'template' && (
+                    <div className="absolute top-2 right-2">
+                      <svg className="w-5 h-5 text-purple-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${
+                    saveType === 'template' ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
+                    </svg>
+                  </div>
+                  <p className={`text-sm font-bold ${saveType === 'template' ? 'text-purple-700' : 'text-gray-700'}`}>
+                    テンプレート保存
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    デザインのみ保存。<br />他の商品にも使い回せます
+                  </p>
+                </button>
+
+                {/* プロジェクト保存 */}
+                <button
+                  type="button"
+                  onClick={() => setSaveType('project')}
+                  className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                    saveType === 'project'
+                      ? 'border-green-500 bg-green-50'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  {saveType === 'project' && (
+                    <div className="absolute top-2 right-2">
+                      <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${
+                    saveType === 'project' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                    </svg>
+                  </div>
+                  <p className={`text-sm font-bold ${saveType === 'project' ? 'text-green-700' : 'text-gray-700'}`}>
+                    プロジェクト保存
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    デザイン＋商品({productCount}件)<br />をセットで保存
+                  </p>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 上書き時のタイプ表示 */}
+          {!canSelectType && currentSaveType && (
+            <div className="mb-4">
+              <span className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium ${
+                currentSaveType === 'template'
+                  ? 'bg-purple-100 text-purple-700'
+                  : 'bg-green-100 text-green-700'
+              }`}>
+                {currentSaveType === 'template' ? (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+                    </svg>
+                    テンプレート
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8" />
+                    </svg>
+                    プロジェクト
+                  </>
+                )}
+              </span>
+            </div>
+          )}
+
+          {/* 名前入力 */}
+          <div className="mb-5">
             <label htmlFor="project-name" className="block text-sm font-medium text-gray-700 mb-2">
-              プロジェクト名
+              {saveType === 'template' ? 'テンプレート名' : 'プロジェクト名'}
             </label>
             <input
               ref={inputRef}
               type="text"
               id="project-name"
               value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setError('');
-              }}
-              placeholder="例: 2月セールPOP"
+              onChange={(e) => { setName(e.target.value); setError(''); }}
+              placeholder={saveType === 'template' ? '例: セール用デザイン' : '例: 2月セールPOP'}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
               disabled={loading}
             />
-            {error && (
-              <p className="mt-2 text-sm text-red-600">{error}</p>
-            )}
+            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
             <p className="mt-2 text-xs text-gray-500">
-              保存したプロジェクトは「保存データ」から再編集できます
+              {saveType === 'template'
+                ? 'デザインだけを保存します。メインページの「保存データから選ぶ」から呼び出せます'
+                : 'デザインと選択した商品データをまとめて保存します'}
             </p>
           </div>
 
+          {/* ボタン */}
           <div className="flex gap-3">
             <button
               type="button"
@@ -133,12 +225,16 @@ export function SaveModal({
             </button>
             <button
               type="submit"
-              className="flex-1 py-3 px-4 bg-green-600 text-white font-medium rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className={`flex-1 py-3 px-4 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                saveType === 'template'
+                  ? 'bg-purple-600 hover:bg-purple-700'
+                  : 'bg-green-600 hover:bg-green-700'
+              }`}
               disabled={loading || !name.trim()}
             >
               {loading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
                   保存中...
                 </>
               ) : (
@@ -157,5 +253,4 @@ export function SaveModal({
   );
 }
 
-// デフォルトエクスポート（後方互換性）
 export default SaveModal;

@@ -6,6 +6,7 @@ import Header from '@/components/Header';
 import ProgressBar from '@/components/ProgressBar';
 import { SaveModal } from '@/components/SaveModal';
 import { saveProject, generateProjectId } from '@/lib/projectStorage';
+import { SaveType } from '@/types/project';
 import { Product } from '@/types/product';
 import {
   EditorElement,
@@ -56,6 +57,7 @@ function PrintContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [currentProjectName, setCurrentProjectName] = useState('');
+  const [currentSaveType, setCurrentSaveType] = useState<SaveType | undefined>(undefined);
 
   // プレビュースケール
   const [previewScale, setPreviewScale] = useState(0.55);
@@ -151,7 +153,7 @@ function PrintContent() {
   };
 
   // --- 保存処理 ---
-  const handleSave = async (name: string) => {
+  const handleSave = async (name: string, saveType: SaveType) => {
     setIsSaving(true);
     try {
       const projectId = currentProjectId || generateProjectId();
@@ -176,7 +178,8 @@ function PrintContent() {
       await saveProject({
         id: projectId,
         name,
-        createdAt: currentProjectId ? new Date().toISOString() : new Date().toISOString(),
+        saveType,
+        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         thumbnail,
         template: { id: templateId, name: template.name, width: template.width, height: template.height },
@@ -187,8 +190,11 @@ function PrintContent() {
 
       setCurrentProjectId(projectId);
       setCurrentProjectName(name);
+      setCurrentSaveType(saveType);
       setShowSaveModal(false);
-      alert('保存しました！');
+
+      const typeLabel = saveType === 'template' ? 'テンプレート' : 'プロジェクト';
+      alert(`${typeLabel}として保存しました！`);
 
     } catch (error) {
       console.error('[save] エラー:', error);
@@ -513,13 +519,14 @@ function PrintContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                 </svg>
-                {currentProjectId ? '上書き保存' : '保存データに保存'}
+                {currentProjectId ? '上書き保存' : 'データを保存'}
               </button>
 
               {currentProjectName && (
-                <p className="text-xs text-gray-500 text-center">
-                  プロジェクト: {currentProjectName}
-                </p>
+                <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
+                  <span className={`inline-block w-2 h-2 rounded-full ${currentSaveType === 'template' ? 'bg-purple-400' : 'bg-green-400'}`} />
+                  <span>{currentSaveType === 'template' ? 'テンプレート' : 'プロジェクト'}: {currentProjectName}</span>
+                </div>
               )}
             </div>
 
@@ -695,6 +702,8 @@ function PrintContent() {
         defaultName={currentProjectName || `POP_${new Date().toLocaleDateString('ja-JP')}`}
         isOverwrite={!!currentProjectId}
         isSaving={isSaving}
+        currentSaveType={currentSaveType}
+        productCount={products.length}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 // プロジェクト保存・読み込みユーティリティ
 
 import { db } from './db';
-import { SavedProject, CreateProjectInput, UpdateProjectInput, GetProjectsOptions } from '@/types/project';
+import { SavedProject, CreateProjectInput, UpdateProjectInput, GetProjectsOptions, SaveType } from '@/types/project';
 import { DEFAULT_TAX_SETTINGS } from '@/types/editor';
 import { Product } from '@/types/product';
 import { EditorElement } from '@/types/editor';
@@ -20,6 +20,7 @@ export function generateProjectId(): string {
 export async function saveProject(data: {
   id: string;
   name: string;
+  saveType: SaveType;
   createdAt: string;
   updatedAt: string;
   thumbnail?: string;
@@ -31,12 +32,13 @@ export async function saveProject(data: {
   const project: SavedProject = {
     id: data.id,
     name: data.name,
+    saveType: data.saveType,
     createdAt: new Date(data.createdAt),
     updatedAt: new Date(data.updatedAt),
     thumbnail: data.thumbnail,
     template: data.template,
     elements: data.elements,
-    selectedProducts: data.selectedProducts,
+    selectedProducts: data.saveType === 'template' ? [] : data.selectedProducts,
     taxSettings: {
       ...DEFAULT_TAX_SETTINGS,
       roundingMode: data.roundingMethod,
@@ -56,11 +58,12 @@ export async function createProject(input: CreateProjectInput): Promise<SavedPro
   const project: SavedProject = {
     id: generateProjectId(),
     name: input.name,
+    saveType: input.saveType,
     createdAt: now,
     updatedAt: now,
     template: input.template,
     elements: input.elements,
-    selectedProducts: input.selectedProducts || [],
+    selectedProducts: input.saveType === 'template' ? [] : (input.selectedProducts || []),
     taxSettings: input.taxSettings || DEFAULT_TAX_SETTINGS,
     editedProductData: input.editedProductData || {},
   };
@@ -114,6 +117,22 @@ export async function getProjects(options: GetProjectsOptions = {}): Promise<Sav
   }
 
   return await collection.toArray();
+}
+
+/**
+ * テンプレート保存のみ取得
+ */
+export async function getSavedTemplates(): Promise<SavedProject[]> {
+  const all = await getProjects({ sortBy: 'updatedAt', sortOrder: 'desc' });
+  return all.filter(p => p.saveType === 'template');
+}
+
+/**
+ * プロジェクト保存のみ取得
+ */
+export async function getSavedProjects(): Promise<SavedProject[]> {
+  const all = await getProjects({ sortBy: 'updatedAt', sortOrder: 'desc' });
+  return all.filter(p => p.saveType !== 'template');
 }
 
 /**
@@ -222,6 +241,7 @@ export async function importProject(jsonString: string): Promise<SavedProject | 
     const project: SavedProject = {
       id: generateProjectId(),
       name: data.name,
+      saveType: data.saveType || 'project',
       createdAt: now,
       updatedAt: now,
       thumbnail: data.thumbnail,

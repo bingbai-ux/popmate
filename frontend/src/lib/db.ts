@@ -12,9 +12,21 @@ class PopMateDB extends Dexie {
   constructor() {
     super('PopMateDB');
     
-    // データベーススキーマ定義
+    // v1: 初期スキーマ
     this.version(1).stores({
       projects: 'id, name, updatedAt, createdAt'
+    });
+
+    // v2: saveTypeカラム追加
+    this.version(2).stores({
+      projects: 'id, name, updatedAt, createdAt, saveType'
+    }).upgrade(tx => {
+      // 既存データにsaveType='project'を設定
+      return tx.table('projects').toCollection().modify(project => {
+        if (!project.saveType) {
+          project.saveType = 'project';
+        }
+      });
     });
   }
 }

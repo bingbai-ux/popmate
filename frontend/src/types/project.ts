@@ -4,23 +4,31 @@ import { EditorElement, TaxSettings } from './editor';
 import { Product } from './product';
 
 /**
+ * 保存タイプ
+ * - template: デザインのみ（テンプレートとして再利用）
+ * - project: デザイン＋商品データ（編集を再開）
+ */
+export type SaveType = 'template' | 'project';
+
+/**
  * 保存されたプロジェクト
  */
 export interface SavedProject {
   id: string;
   name: string;
+  saveType: SaveType;              // ★ 追加: 保存タイプ
   createdAt: Date;
   updatedAt: Date;
-  thumbnail?: string;           // Base64 サムネイル画像
+  thumbnail?: string;              // Base64 サムネイル画像
   template: {
     id: string;
     name: string;
-    width: number;              // mm
-    height: number;             // mm
+    width: number;                 // mm
+    height: number;                // mm
   };
-  elements: EditorElement[];    // デザイン要素
-  selectedProducts: Product[];  // 選択された商品
-  taxSettings: TaxSettings;     // 税設定
+  elements: EditorElement[];       // デザイン要素
+  selectedProducts: Product[];     // 選択された商品（projectのみ）
+  taxSettings: TaxSettings;        // 税設定
   editedProductData?: Record<string, Partial<Product>>;  // 編集された商品データ
 }
 
@@ -29,6 +37,7 @@ export interface SavedProject {
  */
 export interface CreateProjectInput {
   name: string;
+  saveType: SaveType;
   template: {
     id: string;
     name: string;

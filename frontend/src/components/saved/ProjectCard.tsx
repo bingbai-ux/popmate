@@ -10,6 +10,8 @@ interface ProjectCardProps {
 }
 
 export default function ProjectCard({ project, onSelect, onDelete, onDuplicate }: ProjectCardProps) {
+  const isTemplate = project.saveType === 'template';
+
   const formatDate = (date: Date) => {
     const d = new Date(date);
     return d.toLocaleDateString('ja-JP', {
@@ -24,16 +26,12 @@ export default function ProjectCard({ project, onSelect, onDelete, onDuplicate }
   return (
     <div className="bg-white rounded-xl border border-border overflow-hidden hover:shadow-lg transition-shadow group">
       {/* サムネイル */}
-      <div 
+      <div
         className="aspect-[4/3] bg-gray-100 relative cursor-pointer"
         onClick={() => onSelect(project)}
       >
         {project.thumbnail ? (
-          <img
-            src={project.thumbnail}
-            alt={project.name}
-            className="w-full h-full object-cover"
-          />
+          <img src={project.thumbnail} alt={project.name} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-text-muted">
             <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -41,19 +39,51 @@ export default function ProjectCard({ project, onSelect, onDelete, onDuplicate }
             </svg>
           </div>
         )}
-        
+
+        {/* タイプバッジ */}
+        <div className="absolute top-2 left-2">
+          <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium shadow-sm ${
+            isTemplate
+              ? 'bg-purple-100 text-purple-700'
+              : 'bg-green-100 text-green-700'
+          }`}>
+            {isTemplate ? (
+              <>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+                </svg>
+                テンプレート
+              </>
+            ) : (
+              <>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8" />
+                </svg>
+                プロジェクト
+              </>
+            )}
+          </span>
+        </div>
+
         {/* ホバー時のオーバーレイ */}
         <div className="absolute inset-0 bg-primary/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <span className="text-white font-medium">編集する</span>
+          <span className="text-white font-medium">
+            {isTemplate ? 'このデザインを使う' : '編集を再開'}
+          </span>
         </div>
       </div>
 
       {/* 情報 */}
       <div className="p-4">
         <h3 className="font-semibold text-text-dark mb-1 truncate">{project.name}</h3>
-        <p className="text-xs text-text-muted mb-3">
+        <p className="text-xs text-text-muted mb-1">
           {project.template.name} ({project.template.width}×{project.template.height}mm)
         </p>
+        {!isTemplate && project.selectedProducts && project.selectedProducts.length > 0 && (
+          <p className="text-xs text-green-600 mb-1">
+            商品 {project.selectedProducts.length}件
+          </p>
+        )}
         <p className="text-xs text-text-muted mb-3">
           更新: {formatDate(project.updatedAt)}
         </p>
@@ -62,9 +92,13 @@ export default function ProjectCard({ project, onSelect, onDelete, onDuplicate }
         <div className="flex gap-2">
           <button
             onClick={() => onSelect(project)}
-            className="flex-1 py-2 px-3 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors"
+            className={`flex-1 py-2 px-3 text-white text-sm font-medium rounded-lg transition-colors ${
+              isTemplate
+                ? 'bg-purple-600 hover:bg-purple-700'
+                : 'bg-primary hover:bg-primary-dark'
+            }`}
           >
-            編集
+            {isTemplate ? 'デザインを使う' : '編集再開'}
           </button>
           <button
             onClick={() => onDuplicate(project)}
