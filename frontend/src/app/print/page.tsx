@@ -2,8 +2,6 @@
 
 import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Header from '@/components/Header';
-import ProgressBar from '@/components/ProgressBar';
 import { Product } from '@/types/product';
 import {
   EditorElement,
@@ -38,7 +36,7 @@ function PrintContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [elements, setElements] = useState<EditorElement[]>([]);
   const [taxSettings, setTaxSettings] = useState<TaxSettings>(DEFAULT_TAX_SETTINGS);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [displayPage, setDisplayPage] = useState(0); // 画面表示中のページ（0始まり）
   const [isLoaded, setIsLoaded] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [pdfProgress, setPdfProgress] = useState({ current: 0, total: 0 });
@@ -47,13 +45,14 @@ function PrintContent() {
   const [paperSize, setPaperSize] = useState<string>('a4');
   const [offsetX, setOffsetX] = useState(0);  // 位置調整 X (mm)
   const [offsetY, setOffsetY] = useState(0);  // 位置調整 Y (mm)
+  const [showBorders, setShowBorders] = useState(false); // 枠あり印刷
 
-  // Refs
-  const printPagesRef = useRef<HTMLDivElement>(null);
+  // プレビュースケール
+  const [previewScale, setPreviewScale] = useState(0.55);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // --- 状態の復元 ---
   useEffect(() => {
-    // selectedProductsStorageから商品データを取得
     const savedProducts = loadSelectedProducts(templateId);
     if (savedProducts && savedProducts.length > 0) {
       setProducts(savedProducts);
@@ -62,14 +61,12 @@ function PrintContent() {
       console.log('[print] 選択商品が見つかりません');
     }
 
-    // editorStorageからテンプレート要素を取得
     const savedEditorState = loadEditorState(templateId);
     if (savedEditorState && savedEditorState.elements.length > 0) {
       setElements(savedEditorState.elements);
       console.log('[print] エディター状態を読み込みました:', savedEditorState.elements.length, '要素');
     }
 
-    // sessionStorageから税設定を取得
     try {
       const savedTaxSettings = sessionStorage.getItem('taxSettings');
       if (savedTaxSettings) {
@@ -82,6 +79,23 @@ function PrintContent() {
     setIsLoaded(true);
   }, [templateId]);
 
+  // --- プレビュースケールの動的計算 ---
+  useEffect(() => {
+    const updateScale = () => {
+      if (previewContainerRef.current) {
+        const containerWidth = previewContainerRef.current.clientWidth;
+        // A4幅(210mm ≈ 793.7px @96dpi) に対するスケール
+        const a4WidthPx = 210 * 3.7795; // ≈ 793.7px
+        const scale = Math.min((containerWidth - 40) / a4WidthPx, 0.7);
+        setPreviewScale(Math.max(scale, 0.35));
+      }
+    };
+
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
+
   // --- レイアウト計算 ---
   const templateSize = TEMPLATE_SIZES[templateId] || { width: template.width, height: template.height, name: template.name };
   const paper: PaperSize = PAPER_SIZES[paperSize];
@@ -93,14 +107,9 @@ function PrintContent() {
     });
   }, [templateSize, paper, products.length]);
 
-  // --- mm → px 変換（プレビュー用スケール） ---
-  // プレビュー表示のスケール: A4実寸(210mm)を画面幅に合わせる
-  const PREVIEW_SCALE = 2.5; // 1mm = 2.5px（A4 210mm → 525px）
-  const mmToPx = (mm: number) => mm * PREVIEW_SCALE;
-
   // --- ページナビゲーション ---
-  const handlePrevPage = () => setCurrentPage(p => Math.max(1, p - 1));
-  const handleNextPage = () => setCurrentPage(p => Math.min(layout.totalPages, p + 1));
+  const handlePrevPage = () => setDisplayPage(p => Math.max(0, p - 1));
+  const handleNextPage = () => setDisplayPage(p => Math.min(layout.totalPages - 1, p + 1));
 
   // --- 印刷 ---
   const handlePrint = () => {
@@ -111,13 +120,9 @@ function PrintContent() {
   const handleDownloadPDF = async () => {
     setIsGeneratingPDF(true);
     try {
-      // Dynamic import
-      const { exportA4LayoutPdf } = await import('@/lib/pdfExport');
-      
-      await exportA4LayoutPdf({
+      const { exportA4PDF } = await import('@/lib/pdfExport');
+      await exportA4PDF({
         filename: `popmate-${templateId}-${new Date().toISOString().slice(0, 10)}.pdf`,
-        paper,
-        layout,
         onProgress: (current, total) => setPdfProgress({ current, total }),
       });
     } catch (error) {
@@ -130,370 +135,120 @@ function PrintContent() {
   };
 
   // ==================================================
-  // 個別POPのレンダリング（1つのポップ）- プレビュー用
+  // ポップ内コンテンツのレンダリング（mm単位）
   // ==================================================
-  const renderPopPreview = (product: Product, index: number) => {
-    return (
-      <div
-        key={`pop-${product.productId}-${index}`}
-        className="pop-frame"
-        style={{
-          width: mmToPx(templateSize.width),
-          height: mmToPx(templateSize.height),
-          position: 'relative',
-          overflow: 'hidden',
-          backgroundColor: '#ffffff',
-          border: '0.5px solid #e5e7eb',
-          boxSizing: 'border-box',
-        }}
-      >
-        {elements.map((element) => {
-          // プレースホルダーを置換
-          const processedElement = replaceElementPlaceholders(element, product, taxSettings);
-          
-          // mm単位の座標をプレビュー用pxに変換
-          const left = processedElement.position.x * PREVIEW_SCALE;
-          const top = processedElement.position.y * PREVIEW_SCALE;
-          const width = processedElement.size.width * PREVIEW_SCALE;
-          const height = processedElement.size.height * PREVIEW_SCALE;
+  const renderPopContent = (product: Product) => {
+    return elements.map((element) => {
+      const processedElement = replaceElementPlaceholders(element, product, taxSettings);
+      
+      // mm単位で配置
+      const left = `${processedElement.position.x}mm`;
+      const top = `${processedElement.position.y}mm`;
+      const width = `${processedElement.size.width}mm`;
+      const height = `${processedElement.size.height}mm`;
 
-          if (processedElement.type === 'text') {
-            return (
-              <div
-                key={processedElement.id}
-                style={{
-                  position: 'absolute',
-                  left,
-                  top,
-                  width,
-                  height,
-                  fontSize: processedElement.style.fontSize * PREVIEW_SCALE / 3.78,
-                  fontWeight: processedElement.style.fontWeight,
-                  fontFamily: processedElement.style.fontFamily,
-                  color: processedElement.style.color,
-                  textAlign: processedElement.style.textAlign,
-                  lineHeight: `${processedElement.style.lineHeight}%`,
-                  letterSpacing: processedElement.style.letterSpacing,
-                  opacity: processedElement.style.opacity / 100,
-                  overflow: 'hidden',
-                  whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
-                  writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
-                }}
-              >
-                {processedElement.content}
-              </div>
-            );
-          }
-
-          if (processedElement.type === 'shape') {
-            return (
-              <div
-                key={processedElement.id}
-                style={{
-                  position: 'absolute',
-                  left,
-                  top,
-                  width,
-                  height,
-                  zIndex: processedElement.zIndex,
-                }}
-              >
-                <svg width="100%" height="100%" className="overflow-visible">
-                  {processedElement.shapeType === 'rectangle' && (
-                    <rect
-                      width={width}
-                      height={height}
-                      fill={processedElement.style.fill}
-                      fillOpacity={processedElement.style.fillOpacity / 100}
-                      stroke={processedElement.style.stroke}
-                      strokeWidth={processedElement.style.strokeWidth}
-                    />
-                  )}
-                  {processedElement.shapeType === 'roundedRect' && (
-                    <rect
-                      width={width}
-                      height={height}
-                      rx={processedElement.style.cornerRadius || 5}
-                      fill={processedElement.style.fill}
-                      fillOpacity={processedElement.style.fillOpacity / 100}
-                      stroke={processedElement.style.stroke}
-                      strokeWidth={processedElement.style.strokeWidth}
-                    />
-                  )}
-                  {processedElement.shapeType === 'circle' && (
-                    <ellipse
-                      cx={width / 2}
-                      cy={height / 2}
-                      rx={width / 2}
-                      ry={height / 2}
-                      fill={processedElement.style.fill}
-                      fillOpacity={processedElement.style.fillOpacity / 100}
-                      stroke={processedElement.style.stroke}
-                      strokeWidth={processedElement.style.strokeWidth}
-                    />
-                  )}
-                </svg>
-              </div>
-            );
-          }
-
-          if (processedElement.type === 'image') {
-            return (
-              <img
-                key={processedElement.id}
-                src={processedElement.src}
-                alt={processedElement.alt}
-                style={{
-                  position: 'absolute',
-                  left,
-                  top,
-                  width,
-                  height,
-                  objectFit: 'contain',
-                  opacity: processedElement.opacity / 100,
-                }}
-              />
-            );
-          }
-
-          return null;
-        })}
-      </div>
-    );
-  };
-
-  // ==================================================
-  // A4ページのレンダリング（1ページ分）- プレビュー用
-  // ==================================================
-  const renderA4PagePreview = (pageIndex: number) => {
-    const startIndex = pageIndex * layout.itemsPerPage;
-    const pageProducts = products.slice(
-      startIndex,
-      Math.min(startIndex + layout.itemsPerPage, products.length)
-    );
-
-    // グリッド配置（左上から右方向→下方向）
-    const cells = [];
-    for (let row = 0; row < layout.rows; row++) {
-      for (let col = 0; col < layout.columns; col++) {
-        const itemIndex = row * layout.columns + col;
-        const product = pageProducts[itemIndex];
-        cells.push(
+      if (processedElement.type === 'text') {
+        return (
           <div
-            key={`cell-${row}-${col}`}
+            key={processedElement.id}
             style={{
               position: 'absolute',
-              left: mmToPx(layout.marginX + col * (templateSize.width + layout.gapX) + offsetX),
-              top: mmToPx(layout.marginY + row * (templateSize.height + layout.gapY) + offsetY),
+              left,
+              top,
+              width,
+              height,
+              fontSize: `${processedElement.style.fontSize}pt`,
+              fontWeight: processedElement.style.fontWeight,
+              fontFamily: processedElement.style.fontFamily,
+              color: processedElement.style.color,
+              textAlign: processedElement.style.textAlign,
+              lineHeight: `${processedElement.style.lineHeight}%`,
+              letterSpacing: `${processedElement.style.letterSpacing}pt`,
+              opacity: processedElement.style.opacity / 100,
+              overflow: 'hidden',
+              whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
+              writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
             }}
           >
-            {product ? (
-              renderPopPreview(product, startIndex + itemIndex)
-            ) : (
-              // 空白フレーム
-              <div
-                style={{
-                  width: mmToPx(templateSize.width),
-                  height: mmToPx(templateSize.height),
-                  border: '1px dashed #d1d5db',
-                  backgroundColor: '#f9fafb',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <span style={{ color: '#9ca3af', fontSize: '12px' }}>空白</span>
-              </div>
-            )}
+            {processedElement.content}
           </div>
         );
       }
-    }
 
-    return (
-      <div
-        key={`page-${pageIndex}`}
-        className="a4-print-page"
-        style={{
-          width: mmToPx(paper.width),
-          height: mmToPx(paper.height),
-          position: 'relative',
-          backgroundColor: '#ffffff',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-          margin: '0 auto',
-        }}
-      >
-        {cells}
-      </div>
-    );
-  };
+      if (processedElement.type === 'shape') {
+        const widthMm = processedElement.size.width;
+        const heightMm = processedElement.size.height;
+        return (
+          <div
+            key={processedElement.id}
+            style={{
+              position: 'absolute',
+              left,
+              top,
+              width,
+              height,
+              zIndex: processedElement.zIndex,
+            }}
+          >
+            <svg width="100%" height="100%" viewBox={`0 0 ${widthMm} ${heightMm}`} preserveAspectRatio="none">
+              {processedElement.shapeType === 'rectangle' && (
+                <rect
+                  width={widthMm}
+                  height={heightMm}
+                  fill={processedElement.style.fill}
+                  fillOpacity={processedElement.style.fillOpacity / 100}
+                  stroke={processedElement.style.stroke}
+                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
+                />
+              )}
+              {processedElement.shapeType === 'roundedRect' && (
+                <rect
+                  width={widthMm}
+                  height={heightMm}
+                  rx={(processedElement.style.cornerRadius || 5) * 0.264583}
+                  fill={processedElement.style.fill}
+                  fillOpacity={processedElement.style.fillOpacity / 100}
+                  stroke={processedElement.style.stroke}
+                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
+                />
+              )}
+              {processedElement.shapeType === 'circle' && (
+                <ellipse
+                  cx={widthMm / 2}
+                  cy={heightMm / 2}
+                  rx={widthMm / 2}
+                  ry={heightMm / 2}
+                  fill={processedElement.style.fill}
+                  fillOpacity={processedElement.style.fillOpacity / 100}
+                  stroke={processedElement.style.stroke}
+                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
+                />
+              )}
+            </svg>
+          </div>
+        );
+      }
 
-  // ==================================================
-  // 印刷/PDF用の非表示ページレンダリング
-  // ==================================================
-  const renderHiddenPages = () => {
-    return Array.from({ length: layout.totalPages }, (_, pageIndex) => {
-      const startIdx = pageIndex * layout.itemsPerPage;
-      const pageProducts = products.slice(
-        startIdx,
-        Math.min(startIdx + layout.itemsPerPage, products.length)
-      );
+      if (processedElement.type === 'image') {
+        return (
+          <img
+            key={processedElement.id}
+            src={processedElement.src}
+            alt={processedElement.alt}
+            style={{
+              position: 'absolute',
+              left,
+              top,
+              width,
+              height,
+              objectFit: 'contain',
+              opacity: processedElement.opacity / 100,
+            }}
+          />
+        );
+      }
 
-      return (
-        <div
-          key={`hidden-page-${pageIndex}`}
-          className="a4-print-page"
-          style={{
-            width: `${paper.width}mm`,
-            height: `${paper.height}mm`,
-            position: 'relative',
-            backgroundColor: '#ffffff',
-            pageBreakAfter: pageIndex < layout.totalPages - 1 ? 'always' : 'auto',
-          }}
-        >
-          {Array.from({ length: layout.itemsPerPage }, (_, j) => {
-            const row = Math.floor(j / layout.columns);
-            const col = j % layout.columns;
-            const product = pageProducts[j];
-
-            return (
-              <div
-                key={`hidden-cell-${pageIndex}-${j}`}
-                style={{
-                  position: 'absolute',
-                  left: `${layout.marginX + col * (templateSize.width + layout.gapX) + offsetX}mm`,
-                  top: `${layout.marginY + row * (templateSize.height + layout.gapY) + offsetY}mm`,
-                  width: `${templateSize.width}mm`,
-                  height: `${templateSize.height}mm`,
-                }}
-              >
-                {product && (
-                  <div
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      position: 'relative',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {elements.map((element) => {
-                      const processedElement = replaceElementPlaceholders(element, product, taxSettings);
-                      
-                      // 印刷用: mm単位で配置
-                      const left = `${processedElement.position.x}mm`;
-                      const top = `${processedElement.position.y}mm`;
-                      const width = `${processedElement.size.width}mm`;
-                      const height = `${processedElement.size.height}mm`;
-
-                      if (processedElement.type === 'text') {
-                        return (
-                          <div
-                            key={processedElement.id}
-                            style={{
-                              position: 'absolute',
-                              left,
-                              top,
-                              width,
-                              height,
-                              fontSize: `${processedElement.style.fontSize}pt`,
-                              fontWeight: processedElement.style.fontWeight,
-                              fontFamily: processedElement.style.fontFamily,
-                              color: processedElement.style.color,
-                              textAlign: processedElement.style.textAlign,
-                              lineHeight: `${processedElement.style.lineHeight}%`,
-                              letterSpacing: `${processedElement.style.letterSpacing}pt`,
-                              opacity: processedElement.style.opacity / 100,
-                              overflow: 'hidden',
-                              whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
-                              writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
-                            }}
-                          >
-                            {processedElement.content}
-                          </div>
-                        );
-                      }
-
-                      if (processedElement.type === 'shape') {
-                        const widthMm = processedElement.size.width;
-                        const heightMm = processedElement.size.height;
-                        return (
-                          <div
-                            key={processedElement.id}
-                            style={{
-                              position: 'absolute',
-                              left,
-                              top,
-                              width,
-                              height,
-                            }}
-                          >
-                            <svg width="100%" height="100%" viewBox={`0 0 ${widthMm} ${heightMm}`} preserveAspectRatio="none">
-                              {processedElement.shapeType === 'rectangle' && (
-                                <rect
-                                  width={widthMm}
-                                  height={heightMm}
-                                  fill={processedElement.style.fill}
-                                  fillOpacity={processedElement.style.fillOpacity / 100}
-                                  stroke={processedElement.style.stroke}
-                                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
-                                />
-                              )}
-                              {processedElement.shapeType === 'roundedRect' && (
-                                <rect
-                                  width={widthMm}
-                                  height={heightMm}
-                                  rx={(processedElement.style.cornerRadius || 5) * 0.264583}
-                                  fill={processedElement.style.fill}
-                                  fillOpacity={processedElement.style.fillOpacity / 100}
-                                  stroke={processedElement.style.stroke}
-                                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
-                                />
-                              )}
-                              {processedElement.shapeType === 'circle' && (
-                                <ellipse
-                                  cx={widthMm / 2}
-                                  cy={heightMm / 2}
-                                  rx={widthMm / 2}
-                                  ry={heightMm / 2}
-                                  fill={processedElement.style.fill}
-                                  fillOpacity={processedElement.style.fillOpacity / 100}
-                                  stroke={processedElement.style.stroke}
-                                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
-                                />
-                              )}
-                            </svg>
-                          </div>
-                        );
-                      }
-
-                      if (processedElement.type === 'image') {
-                        return (
-                          <img
-                            key={processedElement.id}
-                            src={processedElement.src}
-                            alt={processedElement.alt}
-                            style={{
-                              position: 'absolute',
-                              left,
-                              top,
-                              width,
-                              height,
-                              objectFit: 'contain',
-                              opacity: processedElement.opacity / 100,
-                            }}
-                          />
-                        );
-                      }
-
-                      return null;
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      );
+      return null;
     });
   };
 
@@ -517,7 +272,7 @@ function PrintContent() {
           <p className="text-gray-500 mb-4">印刷するデータがありません</p>
           <button
             onClick={() => router.push(`/data-select?template=${templateId}`)}
-            className="btn-primary text-sm py-2 px-4"
+            className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors"
           >
             商品を選択する
           </button>
@@ -530,94 +285,142 @@ function PrintContent() {
   // UIレンダリング
   // ==================================================
   return (
-    <>
-      {/* ===== 上部: 印刷設定バー ===== */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 print:hidden">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-4 text-sm">
-          {/* 戻るボタン */}
+    <div className="min-h-screen bg-gray-100 print-root">
+
+      {/* ===== 統合ヘッダー（印刷時は非表示） ===== */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 no-print">
+        <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
+
+          {/* 左: ロゴ */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+              <span className="text-white text-sm font-bold">P</span>
+            </div>
+            <span className="text-lg font-bold text-gray-800">PopMate</span>
+          </div>
+
+          {/* 中央: プログレスバー（コンパクト版） */}
+          <div className="flex items-center gap-1">
+            {[
+              { step: 1, label: 'メイン', path: '/' },
+              { step: 2, label: 'デザイン', path: '/editor' },
+              { step: 3, label: 'データ選択', path: '/data-select' },
+              { step: 4, label: '編集', path: '/edit' },
+              { step: 5, label: '印刷', path: '/print' },
+            ].map((s, i, arr) => (
+              <div key={s.step} className="flex items-center">
+                <button
+                  onClick={() => {
+                    if (s.step < 5) {
+                      router.push(`${s.path}?template=${templateId}`);
+                    }
+                  }}
+                  disabled={s.step >= 5}
+                  className={`
+                    flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium
+                    transition-colors
+                    ${s.step < 5
+                      ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 cursor-pointer'
+                      : s.step === 5
+                        ? 'bg-primary text-white'
+                        : 'bg-gray-100 text-gray-400'}
+                  `}
+                >
+                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold
+                    ${s.step < 5 ? 'bg-primary text-white' : s.step === 5 ? 'bg-white text-primary' : 'bg-gray-300 text-white'}
+                  `}>
+                    {s.step < 5 ? '✓' : s.step}
+                  </span>
+                  <span className="hidden sm:inline">{s.label}</span>
+                </button>
+                {i < arr.length - 1 && (
+                  <div className={`w-4 h-px mx-0.5 ${s.step < 5 ? 'bg-blue-400' : 'bg-gray-200'}`} />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* 右: 戻るボタン */}
           <button
             onClick={() => router.push(`/edit?template=${templateId}`)}
-            className="flex items-center gap-2 text-gray-600 hover:text-primary transition-colors"
+            className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 flex-shrink-0"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            <span>編集に戻る</span>
+            編集に戻る
           </button>
-
-          <div className="h-6 w-px bg-gray-200" />
-
-          {/* 印刷ページ範囲 */}
-          <div className="flex items-center gap-2">
-            <span className="text-gray-600 font-medium">印刷ページ</span>
-            <span className="font-bold">{currentPage}</span>
-            <span className="text-gray-400">～</span>
-            <span className="font-bold">{layout.totalPages}</span>
-          </div>
-
-          <div className="h-6 w-px bg-gray-200" />
-
-          {/* 位置調整 */}
-          <div className="flex items-center gap-3">
-            <span className="text-gray-600 font-medium">位置</span>
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-gray-500">上に</span>
-              <input
-                type="number"
-                value={offsetY}
-                onChange={(e) => setOffsetY(Number(e.target.value))}
-                className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-xs"
-                step="0.5"
-              />
-              <span className="text-xs text-gray-400">mm</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-gray-500">右に</span>
-              <input
-                type="number"
-                value={offsetX}
-                onChange={(e) => setOffsetX(Number(e.target.value))}
-                className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-xs"
-                step="0.5"
-              />
-              <span className="text-xs text-gray-400">mm</span>
-            </div>
-          </div>
-
-          <div className="h-6 w-px bg-gray-200" />
-
-          {/* 用紙サイズ */}
-          <div className="flex items-center gap-2">
-            <span className="text-gray-600 font-medium">用紙</span>
-            <select
-              value={paperSize}
-              onChange={(e) => setPaperSize(e.target.value)}
-              className="px-2 py-1 border border-gray-300 rounded text-xs"
-            >
-              {Object.entries(PAPER_SIZES).map(([key, size]) => (
-                <option key={key} value={key}>
-                  {size.name}（{size.width}×{size.height}mm）
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
-      </div>
+      </header>
 
-      {/* ===== メインコンテンツ ===== */}
-      <div className="flex-1 bg-gray-100 print:bg-white">
+      {/* ===== メインコンテンツ（印刷時は非表示） ===== */}
+      <div className="no-print">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          {/* ===== 中央: メインエリア (左=プレビュー、右=情報パネル) ===== */}
           <div className="flex gap-4">
 
             {/* --- 左側: A4プレビュー --- */}
-            <div className="flex-1">
+            <div className="flex-1" ref={previewContainerRef}>
               <div
-                ref={printPagesRef}
                 className="overflow-auto"
-                style={{ maxHeight: 'calc(100vh - 240px)' }}
+                style={{ 
+                  maxHeight: 'calc(100vh - 120px)',
+                  '--preview-scale': previewScale,
+                } as React.CSSProperties}
               >
-                {renderA4PagePreview(currentPage - 1)}
+                {/* 現在表示中のページのみ表示（画面用） */}
+                <div
+                  className="a4-page"
+                  style={{
+                    width: '210mm',
+                    height: '297mm',
+                    position: 'relative',
+                    backgroundColor: '#ffffff',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                    margin: '0 auto',
+                    transform: `scale(${previewScale})`,
+                    transformOrigin: 'top center',
+                    marginBottom: `calc(-297mm * (1 - ${previewScale}) + 20px)`,
+                  }}
+                >
+                  {/* グリッドセル */}
+                  {Array.from({ length: layout.rows }, (_, row) =>
+                    Array.from({ length: layout.columns }, (_, col) => {
+                      const itemIdx = row * layout.columns + col;
+                      const startIdx = displayPage * layout.itemsPerPage;
+                      const product = products[startIdx + itemIdx];
+
+                      return (
+                        <div
+                          key={`cell-${row}-${col}`}
+                          className="pop-cell"
+                          style={{
+                            position: 'absolute',
+                            left: `${layout.marginX + col * (templateSize.width + layout.gapX) + offsetX}mm`,
+                            top: `${layout.marginY + row * (templateSize.height + layout.gapY) + offsetY}mm`,
+                            width: `${templateSize.width}mm`,
+                            height: `${templateSize.height}mm`,
+                          }}
+                        >
+                          {product ? (
+                            <div className={`pop-frame ${showBorders ? 'pop-border' : ''}`} style={{
+                              width: '100%',
+                              height: '100%',
+                              position: 'relative',
+                              overflow: 'hidden',
+                              boxSizing: 'border-box',
+                            }}>
+                              {renderPopContent(product)}
+                            </div>
+                          ) : (
+                            <div className="empty-frame">
+                              <span>空白</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
 
               {/* ページナビゲーション */}
@@ -625,7 +428,7 @@ function PrintContent() {
                 <div className="flex items-center justify-center gap-4 mt-4">
                   <button
                     onClick={handlePrevPage}
-                    disabled={currentPage <= 1}
+                    disabled={displayPage <= 0}
                     className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -633,11 +436,11 @@ function PrintContent() {
                     </svg>
                   </button>
                   <span className="text-lg font-bold">
-                    {currentPage} / {layout.totalPages}
+                    {displayPage + 1} / {layout.totalPages}
                   </span>
                   <button
                     onClick={handleNextPage}
-                    disabled={currentPage >= layout.totalPages}
+                    disabled={displayPage >= layout.totalPages - 1}
                     className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -649,7 +452,7 @@ function PrintContent() {
             </div>
 
             {/* --- 右側: 情報パネル --- */}
-            <div className="w-64 flex-shrink-0 space-y-4 print:hidden">
+            <div className="w-64 flex-shrink-0 space-y-4">
 
               {/* アクションボタン */}
               <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
@@ -687,6 +490,81 @@ function PrintContent() {
                     </>
                   )}
                 </button>
+              </div>
+
+              {/* 印刷設定パネル */}
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
+                  印刷設定
+                </h3>
+
+                <div className="space-y-3">
+                  {/* 枠あり印刷 */}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showBorders}
+                      onChange={(e) => setShowBorders(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span className="text-sm text-gray-700">枠あり印刷</span>
+                  </label>
+
+                  {showBorders && (
+                    <p className="text-xs text-gray-400 ml-6">
+                      カット位置の目安として薄いグレー線を印刷します
+                    </p>
+                  )}
+
+                  {/* 位置調整 */}
+                  <div className="pt-2 border-t border-gray-100">
+                    <p className="text-xs text-gray-500 font-medium mb-2">位置調整</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-gray-400">上下</label>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={offsetY}
+                            onChange={(e) => setOffsetY(Number(e.target.value))}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-center"
+                            step="0.5"
+                          />
+                          <span className="text-xs text-gray-400 flex-shrink-0">mm</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">左右</label>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={offsetX}
+                            onChange={(e) => setOffsetX(Number(e.target.value))}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-center"
+                            step="0.5"
+                          />
+                          <span className="text-xs text-gray-400 flex-shrink-0">mm</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 用紙サイズ */}
+                  <div className="pt-2 border-t border-gray-100">
+                    <p className="text-xs text-gray-500 font-medium mb-2">用紙サイズ</p>
+                    <select
+                      value={paperSize}
+                      onChange={(e) => setPaperSize(e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                    >
+                      {Object.entries(PAPER_SIZES).map(([key, size]) => (
+                        <option key={key} value={key}>
+                          {size.name}（{size.width}×{size.height}mm）
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {/* 用紙情報 */}
@@ -768,32 +646,70 @@ function PrintContent() {
         </div>
       </div>
 
-      {/* ===== 印刷用の非表示レンダリング領域 ===== */}
-      <div
-        id="print-pages-hidden"
-        className="print-only"
-        style={{
-          position: 'fixed',
-          left: '-99999px',
-          top: 0,
-        }}
-      >
-        {renderHiddenPages()}
+      {/* ===== A4ページ群（印刷時に実寸出力） ===== */}
+      <div id="print-area" className="print-area">
+        {Array.from({ length: layout.totalPages }, (_, pageIndex) => {
+          const startIdx = pageIndex * layout.itemsPerPage;
+          const pageProducts = products.slice(
+            startIdx,
+            Math.min(startIdx + layout.itemsPerPage, products.length)
+          );
+
+          return (
+            <div
+              key={`page-${pageIndex}`}
+              className={`a4-page ${pageIndex !== displayPage ? 'hidden-page' : ''}`}
+              data-page-index={pageIndex}
+            >
+              {/* グリッドセル */}
+              {Array.from({ length: layout.rows }, (_, row) =>
+                Array.from({ length: layout.columns }, (_, col) => {
+                  const itemIdx = row * layout.columns + col;
+                  const product = pageProducts[itemIdx];
+
+                  return (
+                    <div
+                      key={`cell-${row}-${col}`}
+                      className="pop-cell"
+                      style={{
+                        position: 'absolute',
+                        left: `${layout.marginX + col * (templateSize.width + layout.gapX) + offsetX}mm`,
+                        top: `${layout.marginY + row * (templateSize.height + layout.gapY) + offsetY}mm`,
+                        width: `${templateSize.width}mm`,
+                        height: `${templateSize.height}mm`,
+                      }}
+                    >
+                      {product ? (
+                        <div className={`pop-frame ${showBorders ? 'pop-border' : ''}`} style={{
+                          width: '100%',
+                          height: '100%',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          boxSizing: 'border-box',
+                        }}>
+                          {renderPopContent(product)}
+                        </div>
+                      ) : (
+                        <div className="empty-frame">
+                          <span>空白</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          );
+        })}
       </div>
-    </>
+    </div>
   );
 }
 
 export default function PrintPage() {
   return (
-    <main className="min-h-screen bg-background-light flex flex-col print:bg-white">
-      <div className="print:hidden">
-        <Header />
-        <ProgressBar currentStep={5} />
-      </div>
-      <Suspense fallback={<div className="flex-1 flex items-center justify-center">読み込み中...</div>}>
-        <PrintContent />
-      </Suspense>
-    </main>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">読み込み中...</div>}>
+      <PrintContent />
+    </Suspense>
   );
 }

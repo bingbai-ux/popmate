@@ -197,66 +197,122 @@ body {
 
 /* ===== 印刷ページ専用スタイル ===== */
 
-/* 画面表示時は非表示 */
-.print-only {
+/* 画面表示時のA4ページ（印刷領域） */
+.print-area {
   display: none;
 }
 
-/* 印刷用スタイル */
+/* A4ページ基本スタイル */
+.a4-page {
+  width: 210mm;
+  height: 297mm;
+  position: relative;
+  background-color: #ffffff;
+  box-sizing: border-box;
+}
+
+/* ポップフレーム */
+.pop-frame {
+  background-color: #ffffff;
+}
+
+/* 枠あり印刷 */
+.pop-border {
+  border: 0.3px solid #d0d0d0;
+}
+
+/* 空白フレーム（画面表示用） */
+.empty-frame {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed #d1d5db;
+  background-color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-frame span {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+/* 非表示ページ（画面表示時） */
+.hidden-page {
+  display: none;
+}
+
+/* ===== 印刷用スタイル ===== */
 @media print {
-  /* 画面用UIをすべて非表示 */
-  body > *:not(#print-pages-hidden) {
-    display: none !important;
-  }
-
-  /* 印刷用レンダリング領域を表示 */
-  #print-pages-hidden,
-  .print-only {
-    display: block !important;
-    position: static !important;
-    left: auto !important;
-  }
-
-  /* A4ページ設定 */
-  .a4-print-page {
-    page-break-after: always;
-    box-shadow: none !important;
-    margin: 0 !important;
-  }
-
-  /* 最後のページの改ページを防止 */
-  .a4-print-page:last-child {
-    page-break-after: auto;
-  }
-
   /* 用紙設定 */
   @page {
     size: A4 portrait;
     margin: 0;
   }
 
-  /* 印刷時のポップ枠線を非表示（実際の印刷では不要） */
-  .pop-frame {
-    border: none !important;
-  }
-
-  /* 旧スタイルとの互換性 */
-  .print-area,
-  .print-area * {
-    visibility: visible;
-  }
-
-  .print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-  }
-
-  .break-inside-avoid {
-    break-inside: avoid;
-  }
-  
+  /* 画面用UIをすべて非表示 */
   .no-print {
+    display: none !important;
+  }
+
+  /* 印刷領域を表示 */
+  .print-area {
+    display: block !important;
+  }
+
+  /* 非表示ページも印刷時は表示 */
+  .hidden-page {
+    display: block !important;
+  }
+
+  /* 背景色を強制的に印刷 */
+  .print-root {
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* A4ページ印刷設定 */
+  .a4-page {
+    width: 210mm !important;
+    height: 297mm !important;
+    position: relative !important;
+    background: white !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transform: none !important;
+    page-break-after: always;
+    page-break-inside: avoid;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 最後のページの改ページを防止 */
+  .a4-page:last-child {
+    page-break-after: auto;
+  }
+
+  /* ポップフレーム印刷設定 */
+  .pop-frame {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 枠あり印刷時の枠線 */
+  .pop-border {
+    border: 0.3px solid #d0d0d0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 空白フレームは印刷しない */
+  .empty-frame {
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .empty-frame span {
     display: none !important;
   }
 }
