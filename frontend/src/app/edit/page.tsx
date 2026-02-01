@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Header from '@/components/Header';
 import ProgressBar from '@/components/ProgressBar';
 import PreviewCanvas from '@/components/edit/PreviewCanvas';
-import ProductEditTable from '@/components/edit/ProductEditTable';
+import { ProductDataTable } from '@/components/edit/ProductDataTable';
 import PrintPreviewModal from '@/components/edit/PrintPreviewModal';
 import { Product } from '@/types/product';
 import {
@@ -33,21 +33,21 @@ function EditContent() {
 
   // 状態
   const [products, setProducts] = useState<Product[]>([]);
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [currentProductIndex, setCurrentProductIndex] = useState(0);
   const [elements, setElements] = useState<EditorElement[]>([]);
   const [taxSettings, setTaxSettings] = useState<TaxSettingsType>(DEFAULT_TAX_SETTINGS);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const selectedProduct = products.find((p) => p.productId === selectedProductId) || null;
+  const selectedProduct = products[currentProductIndex] || null;
 
   // 初期データ読み込み
   useEffect(() => {
-    // selectedProductsStorageから商品データを取得（正しいキーを使用）
+    // selectedProductsStorageから商品データを取得
     const savedProducts = loadSelectedProducts(templateId);
     if (savedProducts && savedProducts.length > 0) {
       setProducts(savedProducts);
-      setSelectedProductId(savedProducts[0].productId);
+      setCurrentProductIndex(0);
       console.log('[edit] 選択商品を読み込みました:', savedProducts.length, '件');
     } else {
       console.log('[edit] 選択商品が見つかりません');
@@ -107,25 +107,19 @@ function EditContent() {
     setIsLoaded(true);
   }, [templateId]);
 
-  // 商品選択
-  const handleSelectProduct = useCallback((productId: string) => {
-    setSelectedProductId(productId);
+  // 商品選択（インデックスベース）
+  const handleSelectProduct = useCallback((index: number) => {
+    setCurrentProductIndex(index);
   }, []);
 
-  // 商品更新
-  const handleUpdateProduct = useCallback((productId: string, updates: Partial<Product>) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.productId === productId ? { ...p, ...updates } : p))
-    );
+  // 商品更新（インデックスベース）
+  const handleEditProduct = useCallback((index: number, field: string, value: string) => {
+    setProducts(prev => prev.map((p, i) =>
+      i === index
+        ? { ...p, [field]: field === 'price' ? Number(value) || p.price : value }
+        : p
+    ));
   }, []);
-
-  // 保存
-  const handleSave = () => {
-    // selectedProductsStorageを使用して保存
-    saveSelectedProducts(products, templateId);
-    sessionStorage.setItem('taxSettings', JSON.stringify(taxSettings));
-    alert('保存しました');
-  };
 
   if (!isLoaded) {
     return (
@@ -142,7 +136,7 @@ function EditContent() {
         <div className="flex items-center gap-4">
           <Link
             href={`/data-select?template=${templateId}`}
-            className="flex items-center gap-2 text-gray-600 hover:text-primary transition-colors"
+            className="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -161,16 +155,12 @@ function EditContent() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.push(`/editor?template=${templateId}`)}
-            className="px-3 py-2 text-sm text-gray-600 hover:text-primary transition-colors"
+            className="px-3 py-2 text-sm text-gray-600 hover:text-blue-600 transition-colors"
           >
             デザインを編集
           </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 border border-border rounded-lg hover:bg-gray-50 transition-colors text-sm"
-          >
-            保存
-          </button>
+          {/* ★ 「保存」ボタン削除 — 保存は印刷画面で行う */}
+          {/* ★ 「印刷へ進む」を青ボタンに変更 */}
           <button
             onClick={() => {
               // 印刷前にデータを保存
@@ -179,7 +169,7 @@ function EditContent() {
               router.push(`/print?template=${templateId}`);
             }}
             disabled={products.length === 0}
-            className="btn-primary text-sm py-2 disabled:opacity-50 flex items-center gap-2"
+            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -199,7 +189,7 @@ function EditContent() {
             <p className="text-gray-500 mb-4">商品が選択されていません</p>
             <Link
               href={`/data-select?template=${templateId}`}
-              className="btn-primary text-sm py-2 px-4"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
             >
               商品を選択する
             </Link>
@@ -224,14 +214,15 @@ function EditContent() {
             />
           </div>
 
-          {/* 下部: 商品テーブル */}
+          {/* 下部: 商品テーブル（変数連動 & 列リサイズ対応） */}
           <div className="flex-1 p-6 overflow-auto">
-            <ProductEditTable
+            <ProductDataTable
               products={products}
-              selectedProductId={selectedProductId}
-              taxSettings={taxSettings}
+              elements={elements}
+              currentIndex={currentProductIndex}
               onSelectProduct={handleSelectProduct}
-              onUpdateProduct={handleUpdateProduct}
+              roundingMethod={taxSettings.roundingMode}
+              onEditProduct={handleEditProduct}
             />
           </div>
         </div>

@@ -110,3 +110,74 @@ export function replaceElementPlaceholders(
   }
   return cloned;
 }
+
+/**
+ * プレースホルダーと表示列のマッピング
+ */
+export const PLACEHOLDER_COLUMN_MAP: Record<string, { key: string; label: string }> = {
+  '{{productName}}': { key: 'productName', label: '商品名' },
+  '{{price}}': { key: 'price', label: '税抜価格' },
+  '{{priceNumber}}': { key: 'price', label: '税抜価格' },
+  '{{taxIncludedPrice}}': { key: 'taxIncludedPrice', label: '税込価格' },
+  '{{taxIncludedPriceNumber}}': { key: 'taxIncludedPrice', label: '税込価格' },
+  '{{description}}': { key: 'description', label: '説明' },
+  '{{maker}}': { key: 'maker', label: 'メーカー' },
+  '{{taxRate}}': { key: 'taxRate', label: '税率' },
+  '{{taxRateNumber}}': { key: 'taxRate', label: '税率' },
+  '{{category}}': { key: 'category', label: 'カテゴリ' },
+  '{{productCode}}': { key: 'productCode', label: '商品コード' },
+};
+
+/**
+ * 要素群から使用されているプレースホルダーを検出
+ */
+export function detectUsedPlaceholders(elements: EditorElement[]): string[] {
+  const usedPlaceholders = new Set<string>();
+  const placeholderRegex = /\{\{[^}]+\}\}/g;
+
+  for (const element of elements) {
+    if (element.type === 'text' && element.content) {
+      const matches = element.content.match(placeholderRegex);
+      if (matches) {
+        matches.forEach(m => usedPlaceholders.add(m));
+      }
+    }
+    // バーコード・QRコードも対応
+    if ((element as any).settings?.value) {
+      const matches = (element as any).settings.value.match(placeholderRegex);
+      if (matches) {
+        matches.forEach((m: string) => usedPlaceholders.add(m));
+      }
+    }
+  }
+
+  return Array.from(usedPlaceholders);
+}
+
+/**
+ * 使用されているプレースホルダーから表示すべき列を取得
+ */
+export function getUsedColumns(elements: EditorElement[]): { key: string; label: string }[] {
+  const usedPlaceholders = detectUsedPlaceholders(elements);
+  const columnsMap = new Map<string, string>();
+
+  // 常に表示する列
+  columnsMap.set('productName', '商品名');
+
+  // 使用されているプレースホルダーに対応する列を追加
+  for (const placeholder of usedPlaceholders) {
+    const mapping = PLACEHOLDER_COLUMN_MAP[placeholder];
+    if (mapping && !columnsMap.has(mapping.key)) {
+      columnsMap.set(mapping.key, mapping.label);
+    }
+  }
+
+  // 税込価格は常に表示（価格関連のプレースホルダーがある場合）
+  if (usedPlaceholders.some(p => p.includes('price') || p.includes('Price'))) {
+    if (!columnsMap.has('taxIncludedPrice')) {
+      columnsMap.set('taxIncludedPrice', '税込価格');
+    }
+  }
+
+  return Array.from(columnsMap.entries()).map(([key, label]) => ({ key, label }));
+}

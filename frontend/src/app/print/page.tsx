@@ -2,6 +2,10 @@
 
 import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Header from '@/components/Header';
+import ProgressBar from '@/components/ProgressBar';
+import { SaveModal } from '@/components/SaveModal';
+import { saveProject, generateProjectId } from '@/lib/projectStorage';
 import { Product } from '@/types/product';
 import {
   EditorElement,
@@ -47,6 +51,12 @@ function PrintContent() {
   const [offsetY, setOffsetY] = useState(0);  // 位置調整 Y (mm)
   const [showBorders, setShowBorders] = useState(false); // 枠あり印刷
 
+  // 保存機能
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [currentProjectName, setCurrentProjectName] = useState('');
+
   // プレビュースケール
   const [previewScale, setPreviewScale] = useState(0.55);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -76,8 +86,14 @@ function PrintContent() {
       console.error('[print] 税設定の復元に失敗:', e);
     }
 
+    // URLパラメータからプロジェクト情報を復元（保存データ再編集時）
+    const pid = searchParams.get('projectId');
+    const pname = searchParams.get('projectName');
+    if (pid) setCurrentProjectId(pid);
+    if (pname) setCurrentProjectName(decodeURIComponent(pname));
+
     setIsLoaded(true);
-  }, [templateId]);
+  }, [templateId, searchParams]);
 
   // --- プレビュースケールの動的計算 ---
   useEffect(() => {
@@ -131,6 +147,54 @@ function PrintContent() {
     } finally {
       setIsGeneratingPDF(false);
       setPdfProgress({ current: 0, total: 0 });
+    }
+  };
+
+  // --- 保存処理 ---
+  const handleSave = async (name: string) => {
+    setIsSaving(true);
+    try {
+      const projectId = currentProjectId || generateProjectId();
+
+      // サムネイル生成
+      let thumbnail: string | undefined;
+      try {
+        const firstPage = document.querySelector<HTMLElement>('.a4-page');
+        if (firstPage) {
+          const { default: html2canvas } = await import('html2canvas');
+          const canvas = await html2canvas(firstPage, {
+            scale: 0.3,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+          });
+          thumbnail = canvas.toDataURL('image/jpeg', 0.6);
+        }
+      } catch (e) {
+        console.warn('[save] サムネイル生成スキップ:', e);
+      }
+
+      await saveProject({
+        id: projectId,
+        name,
+        createdAt: currentProjectId ? new Date().toISOString() : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        thumbnail,
+        template: { id: templateId, name: template.name, width: template.width, height: template.height },
+        elements,
+        selectedProducts: products,
+        roundingMethod: taxSettings.roundingMode,
+      });
+
+      setCurrentProjectId(projectId);
+      setCurrentProjectName(name);
+      setShowSaveModal(false);
+      alert('保存しました！');
+
+    } catch (error) {
+      console.error('[save] エラー:', error);
+      alert(`保存に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -287,72 +351,6 @@ function PrintContent() {
   return (
     <div className="min-h-screen bg-gray-100 print-root">
 
-      {/* ===== 統合ヘッダー（印刷時は非表示） ===== */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 no-print">
-        <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
-
-          {/* 左: ロゴ */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm font-bold">P</span>
-            </div>
-            <span className="text-lg font-bold text-gray-800">PopMate</span>
-          </div>
-
-          {/* 中央: プログレスバー（コンパクト版） */}
-          <div className="flex items-center gap-1">
-            {[
-              { step: 1, label: 'メイン', path: '/' },
-              { step: 2, label: 'デザイン', path: '/editor' },
-              { step: 3, label: 'データ選択', path: '/data-select' },
-              { step: 4, label: '編集', path: '/edit' },
-              { step: 5, label: '印刷', path: '/print' },
-            ].map((s, i, arr) => (
-              <div key={s.step} className="flex items-center">
-                <button
-                  onClick={() => {
-                    if (s.step < 5) {
-                      router.push(`${s.path}?template=${templateId}`);
-                    }
-                  }}
-                  disabled={s.step >= 5}
-                  className={`
-                    flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium
-                    transition-colors
-                    ${s.step < 5
-                      ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 cursor-pointer'
-                      : s.step === 5
-                        ? 'bg-primary text-white'
-                        : 'bg-gray-100 text-gray-400'}
-                  `}
-                >
-                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold
-                    ${s.step < 5 ? 'bg-primary text-white' : s.step === 5 ? 'bg-white text-primary' : 'bg-gray-300 text-white'}
-                  `}>
-                    {s.step < 5 ? '✓' : s.step}
-                  </span>
-                  <span className="hidden sm:inline">{s.label}</span>
-                </button>
-                {i < arr.length - 1 && (
-                  <div className={`w-4 h-px mx-0.5 ${s.step < 5 ? 'bg-blue-400' : 'bg-gray-200'}`} />
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* 右: 戻るボタン */}
-          <button
-            onClick={() => router.push(`/edit?template=${templateId}`)}
-            className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 flex-shrink-0"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            編集に戻る
-          </button>
-        </div>
-      </header>
-
       {/* ===== メインコンテンツ（印刷時は非表示） ===== */}
       <div className="no-print">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -363,7 +361,7 @@ function PrintContent() {
               <div
                 className="overflow-auto"
                 style={{ 
-                  maxHeight: 'calc(100vh - 120px)',
+                  maxHeight: 'calc(100vh - 200px)',
                   '--preview-scale': previewScale,
                 } as React.CSSProperties}
               >
@@ -458,7 +456,7 @@ function PrintContent() {
               <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
                 <button
                   onClick={handlePrint}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark font-medium transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -470,7 +468,7 @@ function PrintContent() {
                 <button
                   onClick={handleDownloadPDF}
                   disabled={isGeneratingPDF}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary/5 font-medium disabled:opacity-50 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 font-medium disabled:opacity-50 transition-colors"
                 >
                   {isGeneratingPDF ? (
                     <>
@@ -490,6 +488,24 @@ function PrintContent() {
                     </>
                   )}
                 </button>
+
+                {/* ★ 保存ボタン */}
+                <button
+                  onClick={() => setShowSaveModal(true)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-green-600 text-green-600 rounded-lg hover:bg-green-50 font-medium transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                  </svg>
+                  {currentProjectId ? '上書き保存' : '保存データに保存'}
+                </button>
+
+                {currentProjectName && (
+                  <p className="text-xs text-gray-500 text-center">
+                    プロジェクト: {currentProjectName}
+                  </p>
+                )}
               </div>
 
               {/* 印刷設定パネル */}
@@ -505,7 +521,7 @@ function PrintContent() {
                       type="checkbox"
                       checked={showBorders}
                       onChange={(e) => setShowBorders(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                     <span className="text-sm text-gray-700">枠あり印刷</span>
                   </label>
@@ -606,11 +622,11 @@ function PrintContent() {
                 <dl className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <dt className="text-gray-500">商品数</dt>
-                    <dd className="font-bold text-primary">{products.length}件</dd>
+                    <dd className="font-bold text-blue-600">{products.length}件</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-gray-500">印刷ページ数</dt>
-                    <dd className="font-bold text-primary">{layout.totalPages}ページ</dd>
+                    <dd className="font-bold text-blue-600">{layout.totalPages}ページ</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-gray-500">空白フレーム数</dt>
@@ -641,6 +657,17 @@ function PrintContent() {
                   ※ デザイン画面で変更できます
                 </p>
               </div>
+
+              {/* 戻るボタン */}
+              <button
+                onClick={() => router.push(`/edit?template=${templateId}`)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                編集に戻る
+              </button>
             </div>
           </div>
         </div>
@@ -702,14 +729,28 @@ function PrintContent() {
           );
         })}
       </div>
+
+      {/* 保存モーダル */}
+      <SaveModal
+        isOpen={showSaveModal}
+        onClose={() => setShowSaveModal(false)}
+        onSave={handleSave}
+        defaultName={currentProjectName || `POP_${new Date().toLocaleDateString('ja-JP')}`}
+        isOverwrite={!!currentProjectId}
+        isSaving={isSaving}
+      />
     </div>
   );
 }
 
 export default function PrintPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">読み込み中...</div>}>
-      <PrintContent />
-    </Suspense>
+    <main className="min-h-screen bg-background-light flex flex-col">
+      <Header />
+      <ProgressBar currentStep={5} />
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center">読み込み中...</div>}>
+        <PrintContent />
+      </Suspense>
+    </main>
   );
 }

@@ -3,12 +3,48 @@
 import { db } from './db';
 import { SavedProject, CreateProjectInput, UpdateProjectInput, GetProjectsOptions } from '@/types/project';
 import { DEFAULT_TAX_SETTINGS } from '@/types/editor';
+import { Product } from '@/types/product';
+import { EditorElement } from '@/types/editor';
 
 /**
  * ユニークIDを生成
  */
-function generateId(): string {
+export function generateProjectId(): string {
   return `proj-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
+ * プロジェクトを保存（新規作成または上書き）
+ * 印刷画面から呼び出される簡易版
+ */
+export async function saveProject(data: {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  thumbnail?: string;
+  template: { id: string; name: string; width: number; height: number };
+  elements: EditorElement[];
+  selectedProducts: Product[];
+  roundingMethod: 'round' | 'floor' | 'ceil';
+}): Promise<void> {
+  const project: SavedProject = {
+    id: data.id,
+    name: data.name,
+    createdAt: new Date(data.createdAt),
+    updatedAt: new Date(data.updatedAt),
+    thumbnail: data.thumbnail,
+    template: data.template,
+    elements: data.elements,
+    selectedProducts: data.selectedProducts,
+    taxSettings: {
+      ...DEFAULT_TAX_SETTINGS,
+      roundingMode: data.roundingMethod,
+    },
+    editedProductData: {},
+  };
+
+  await db.projects.put(project);
 }
 
 /**
@@ -18,7 +54,7 @@ export async function createProject(input: CreateProjectInput): Promise<SavedPro
   const now = new Date();
   
   const project: SavedProject = {
-    id: generateId(),
+    id: generateProjectId(),
     name: input.name,
     createdAt: now,
     updatedAt: now,
@@ -106,7 +142,7 @@ export async function duplicateProject(id: string, newName?: string): Promise<Sa
   const now = new Date();
   const duplicated: SavedProject = {
     ...project,
-    id: generateId(),
+    id: generateProjectId(),
     name: newName || `${project.name} (コピー)`,
     createdAt: now,
     updatedAt: now,
@@ -184,7 +220,7 @@ export async function importProject(jsonString: string): Promise<SavedProject | 
 
     const now = new Date();
     const project: SavedProject = {
-      id: generateId(),
+      id: generateProjectId(),
       name: data.name,
       createdAt: now,
       updatedAt: now,
