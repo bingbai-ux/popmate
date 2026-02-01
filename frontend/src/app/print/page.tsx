@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect, Suspense, useRef } from 'react';
+import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import ProgressBar from '@/components/ProgressBar';
-import PreviewCanvas from '@/components/edit/PreviewCanvas';
 import { Product } from '@/types/product';
 import {
   EditorElement,
@@ -15,12 +14,19 @@ import {
 import { getTemplateById } from '@/types/template';
 import { loadSelectedProducts } from '@/lib/selectedProductsStorage';
 import { loadEditorState } from '@/lib/editorStorage';
+import {
+  calculateLayout,
+  TEMPLATE_SIZES,
+  PAPER_SIZES,
+  type LayoutResult,
+  type PaperSize,
+} from '@/lib/printLayout';
+import { replaceElementPlaceholders } from '@/lib/placeholderUtils';
 
 function PrintContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const templateId = searchParams.get('template') || 'price-pop';
-  const printRef = useRef<HTMLDivElement>(null);
 
   // テンプレート設定
   const templateData = getTemplateById(templateId);
@@ -28,18 +34,26 @@ function PrintContent() {
     ? { id: templateData.id, name: templateData.name, width: templateData.width, height: templateData.height }
     : { id: 'price-pop', name: 'プライスポップ', width: 91, height: 55 };
 
-  // 状態
+  // --- State ---
   const [products, setProducts] = useState<Product[]>([]);
   const [elements, setElements] = useState<EditorElement[]>([]);
   const [taxSettings, setTaxSettings] = useState<TaxSettings>(DEFAULT_TAX_SETTINGS);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState({ current: 0, total: 0 });
 
-  const currentProduct = products[currentIndex] || null;
+  // 印刷設定
+  const [paperSize, setPaperSize] = useState<string>('a4');
+  const [offsetX, setOffsetX] = useState(0);  // 位置調整 X (mm)
+  const [offsetY, setOffsetY] = useState(0);  // 位置調整 Y (mm)
 
-  // 初期データ読み込み
+  // Refs
+  const printPagesRef = useRef<HTMLDivElement>(null);
+
+  // --- 状態の復元 ---
   useEffect(() => {
-    // selectedProductsStorageから商品データを取得（正しいキーを使用）
+    // selectedProductsStorageから商品データを取得
     const savedProducts = loadSelectedProducts(templateId);
     if (savedProducts && savedProducts.length > 0) {
       setProducts(savedProducts);
@@ -68,64 +82,422 @@ function PrintContent() {
     setIsLoaded(true);
   }, [templateId]);
 
-  // 印刷実行
+  // --- レイアウト計算 ---
+  const templateSize = TEMPLATE_SIZES[templateId] || { width: template.width, height: template.height, name: template.name };
+  const paper: PaperSize = PAPER_SIZES[paperSize];
+
+  const layout: LayoutResult = useMemo(() => {
+    return calculateLayout(templateSize, paper, products.length, {
+      gapX: 0,
+      gapY: 0,
+    });
+  }, [templateSize, paper, products.length]);
+
+  // --- mm → px 変換（プレビュー用スケール） ---
+  // プレビュー表示のスケール: A4実寸(210mm)を画面幅に合わせる
+  const PREVIEW_SCALE = 2.5; // 1mm = 2.5px（A4 210mm → 525px）
+  const mmToPx = (mm: number) => mm * PREVIEW_SCALE;
+
+  // --- ページナビゲーション ---
+  const handlePrevPage = () => setCurrentPage(p => Math.max(1, p - 1));
+  const handleNextPage = () => setCurrentPage(p => Math.min(layout.totalPages, p + 1));
+
+  // --- 印刷 ---
   const handlePrint = () => {
     window.print();
   };
 
-  // PDFダウンロード（html2canvasとjsPDFを使用）
+  // --- PDF生成 ---
   const handleDownloadPDF = async () => {
+    setIsGeneratingPDF(true);
     try {
-      // 動的インポート
-      const html2canvas = (await import('html2canvas')).default;
-      const { jsPDF } = await import('jspdf');
-
-      const pdf = new jsPDF({
-        orientation: template.width > template.height ? 'landscape' : 'portrait',
-        unit: 'mm',
-        format: [template.width, template.height],
+      // Dynamic import
+      const { exportA4LayoutPdf } = await import('@/lib/pdfExport');
+      
+      await exportA4LayoutPdf({
+        filename: `popmate-${templateId}-${new Date().toISOString().slice(0, 10)}.pdf`,
+        paper,
+        layout,
+        onProgress: (current, total) => setPdfProgress({ current, total }),
       });
-
-      for (let i = 0; i < products.length; i++) {
-        setCurrentIndex(i);
-        await new Promise(resolve => setTimeout(resolve, 100)); // レンダリング待ち
-
-        const element = printRef.current;
-        if (!element) continue;
-
-        const canvas = await html2canvas(element, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-        });
-
-        const imgData = canvas.toDataURL('image/png');
-        
-        if (i > 0) {
-          pdf.addPage([template.width, template.height]);
-        }
-        
-        pdf.addImage(imgData, 'PNG', 0, 0, template.width, template.height);
-      }
-
-      pdf.save(`popmate_${templateId}_${products.length}items.pdf`);
-      setCurrentIndex(0);
     } catch (error) {
-      console.error('PDF生成エラー:', error);
-      alert('PDF生成に失敗しました');
+      console.error('[PDF] 生成エラー:', error);
+      alert(`PDF生成に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
+    } finally {
+      setIsGeneratingPDF(false);
+      setPdfProgress({ current: 0, total: 0 });
     }
   };
 
-  // 前の商品
-  const handlePrev = () => {
-    setCurrentIndex((prev) => Math.max(0, prev - 1));
+  // ==================================================
+  // 個別POPのレンダリング（1つのポップ）- プレビュー用
+  // ==================================================
+  const renderPopPreview = (product: Product, index: number) => {
+    return (
+      <div
+        key={`pop-${product.productId}-${index}`}
+        className="pop-frame"
+        style={{
+          width: mmToPx(templateSize.width),
+          height: mmToPx(templateSize.height),
+          position: 'relative',
+          overflow: 'hidden',
+          backgroundColor: '#ffffff',
+          border: '0.5px solid #e5e7eb',
+          boxSizing: 'border-box',
+        }}
+      >
+        {elements.map((element) => {
+          // プレースホルダーを置換
+          const processedElement = replaceElementPlaceholders(element, product, taxSettings);
+          
+          // mm単位の座標をプレビュー用pxに変換
+          const left = processedElement.position.x * PREVIEW_SCALE;
+          const top = processedElement.position.y * PREVIEW_SCALE;
+          const width = processedElement.size.width * PREVIEW_SCALE;
+          const height = processedElement.size.height * PREVIEW_SCALE;
+
+          if (processedElement.type === 'text') {
+            return (
+              <div
+                key={processedElement.id}
+                style={{
+                  position: 'absolute',
+                  left,
+                  top,
+                  width,
+                  height,
+                  fontSize: processedElement.style.fontSize * PREVIEW_SCALE / 3.78,
+                  fontWeight: processedElement.style.fontWeight,
+                  fontFamily: processedElement.style.fontFamily,
+                  color: processedElement.style.color,
+                  textAlign: processedElement.style.textAlign,
+                  lineHeight: `${processedElement.style.lineHeight}%`,
+                  letterSpacing: processedElement.style.letterSpacing,
+                  opacity: processedElement.style.opacity / 100,
+                  overflow: 'hidden',
+                  whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
+                  writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                }}
+              >
+                {processedElement.content}
+              </div>
+            );
+          }
+
+          if (processedElement.type === 'shape') {
+            return (
+              <div
+                key={processedElement.id}
+                style={{
+                  position: 'absolute',
+                  left,
+                  top,
+                  width,
+                  height,
+                  zIndex: processedElement.zIndex,
+                }}
+              >
+                <svg width="100%" height="100%" className="overflow-visible">
+                  {processedElement.shapeType === 'rectangle' && (
+                    <rect
+                      width={width}
+                      height={height}
+                      fill={processedElement.style.fill}
+                      fillOpacity={processedElement.style.fillOpacity / 100}
+                      stroke={processedElement.style.stroke}
+                      strokeWidth={processedElement.style.strokeWidth}
+                    />
+                  )}
+                  {processedElement.shapeType === 'roundedRect' && (
+                    <rect
+                      width={width}
+                      height={height}
+                      rx={processedElement.style.cornerRadius || 5}
+                      fill={processedElement.style.fill}
+                      fillOpacity={processedElement.style.fillOpacity / 100}
+                      stroke={processedElement.style.stroke}
+                      strokeWidth={processedElement.style.strokeWidth}
+                    />
+                  )}
+                  {processedElement.shapeType === 'circle' && (
+                    <ellipse
+                      cx={width / 2}
+                      cy={height / 2}
+                      rx={width / 2}
+                      ry={height / 2}
+                      fill={processedElement.style.fill}
+                      fillOpacity={processedElement.style.fillOpacity / 100}
+                      stroke={processedElement.style.stroke}
+                      strokeWidth={processedElement.style.strokeWidth}
+                    />
+                  )}
+                </svg>
+              </div>
+            );
+          }
+
+          if (processedElement.type === 'image') {
+            return (
+              <img
+                key={processedElement.id}
+                src={processedElement.src}
+                alt={processedElement.alt}
+                style={{
+                  position: 'absolute',
+                  left,
+                  top,
+                  width,
+                  height,
+                  objectFit: 'contain',
+                  opacity: processedElement.opacity / 100,
+                }}
+              />
+            );
+          }
+
+          return null;
+        })}
+      </div>
+    );
   };
 
-  // 次の商品
-  const handleNext = () => {
-    setCurrentIndex((prev) => Math.min(products.length - 1, prev + 1));
+  // ==================================================
+  // A4ページのレンダリング（1ページ分）- プレビュー用
+  // ==================================================
+  const renderA4PagePreview = (pageIndex: number) => {
+    const startIndex = pageIndex * layout.itemsPerPage;
+    const pageProducts = products.slice(
+      startIndex,
+      Math.min(startIndex + layout.itemsPerPage, products.length)
+    );
+
+    // グリッド配置（左上から右方向→下方向）
+    const cells = [];
+    for (let row = 0; row < layout.rows; row++) {
+      for (let col = 0; col < layout.columns; col++) {
+        const itemIndex = row * layout.columns + col;
+        const product = pageProducts[itemIndex];
+        cells.push(
+          <div
+            key={`cell-${row}-${col}`}
+            style={{
+              position: 'absolute',
+              left: mmToPx(layout.marginX + col * (templateSize.width + layout.gapX) + offsetX),
+              top: mmToPx(layout.marginY + row * (templateSize.height + layout.gapY) + offsetY),
+            }}
+          >
+            {product ? (
+              renderPopPreview(product, startIndex + itemIndex)
+            ) : (
+              // 空白フレーム
+              <div
+                style={{
+                  width: mmToPx(templateSize.width),
+                  height: mmToPx(templateSize.height),
+                  border: '1px dashed #d1d5db',
+                  backgroundColor: '#f9fafb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <span style={{ color: '#9ca3af', fontSize: '12px' }}>空白</span>
+              </div>
+            )}
+          </div>
+        );
+      }
+    }
+
+    return (
+      <div
+        key={`page-${pageIndex}`}
+        className="a4-print-page"
+        style={{
+          width: mmToPx(paper.width),
+          height: mmToPx(paper.height),
+          position: 'relative',
+          backgroundColor: '#ffffff',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          margin: '0 auto',
+        }}
+      >
+        {cells}
+      </div>
+    );
   };
 
+  // ==================================================
+  // 印刷/PDF用の非表示ページレンダリング
+  // ==================================================
+  const renderHiddenPages = () => {
+    return Array.from({ length: layout.totalPages }, (_, pageIndex) => {
+      const startIdx = pageIndex * layout.itemsPerPage;
+      const pageProducts = products.slice(
+        startIdx,
+        Math.min(startIdx + layout.itemsPerPage, products.length)
+      );
+
+      return (
+        <div
+          key={`hidden-page-${pageIndex}`}
+          className="a4-print-page"
+          style={{
+            width: `${paper.width}mm`,
+            height: `${paper.height}mm`,
+            position: 'relative',
+            backgroundColor: '#ffffff',
+            pageBreakAfter: pageIndex < layout.totalPages - 1 ? 'always' : 'auto',
+          }}
+        >
+          {Array.from({ length: layout.itemsPerPage }, (_, j) => {
+            const row = Math.floor(j / layout.columns);
+            const col = j % layout.columns;
+            const product = pageProducts[j];
+
+            return (
+              <div
+                key={`hidden-cell-${pageIndex}-${j}`}
+                style={{
+                  position: 'absolute',
+                  left: `${layout.marginX + col * (templateSize.width + layout.gapX) + offsetX}mm`,
+                  top: `${layout.marginY + row * (templateSize.height + layout.gapY) + offsetY}mm`,
+                  width: `${templateSize.width}mm`,
+                  height: `${templateSize.height}mm`,
+                }}
+              >
+                {product && (
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      position: 'relative',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {elements.map((element) => {
+                      const processedElement = replaceElementPlaceholders(element, product, taxSettings);
+                      
+                      // 印刷用: mm単位で配置
+                      const left = `${processedElement.position.x}mm`;
+                      const top = `${processedElement.position.y}mm`;
+                      const width = `${processedElement.size.width}mm`;
+                      const height = `${processedElement.size.height}mm`;
+
+                      if (processedElement.type === 'text') {
+                        return (
+                          <div
+                            key={processedElement.id}
+                            style={{
+                              position: 'absolute',
+                              left,
+                              top,
+                              width,
+                              height,
+                              fontSize: `${processedElement.style.fontSize}pt`,
+                              fontWeight: processedElement.style.fontWeight,
+                              fontFamily: processedElement.style.fontFamily,
+                              color: processedElement.style.color,
+                              textAlign: processedElement.style.textAlign,
+                              lineHeight: `${processedElement.style.lineHeight}%`,
+                              letterSpacing: `${processedElement.style.letterSpacing}pt`,
+                              opacity: processedElement.style.opacity / 100,
+                              overflow: 'hidden',
+                              whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
+                              writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                            }}
+                          >
+                            {processedElement.content}
+                          </div>
+                        );
+                      }
+
+                      if (processedElement.type === 'shape') {
+                        const widthMm = processedElement.size.width;
+                        const heightMm = processedElement.size.height;
+                        return (
+                          <div
+                            key={processedElement.id}
+                            style={{
+                              position: 'absolute',
+                              left,
+                              top,
+                              width,
+                              height,
+                            }}
+                          >
+                            <svg width="100%" height="100%" viewBox={`0 0 ${widthMm} ${heightMm}`} preserveAspectRatio="none">
+                              {processedElement.shapeType === 'rectangle' && (
+                                <rect
+                                  width={widthMm}
+                                  height={heightMm}
+                                  fill={processedElement.style.fill}
+                                  fillOpacity={processedElement.style.fillOpacity / 100}
+                                  stroke={processedElement.style.stroke}
+                                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
+                                />
+                              )}
+                              {processedElement.shapeType === 'roundedRect' && (
+                                <rect
+                                  width={widthMm}
+                                  height={heightMm}
+                                  rx={(processedElement.style.cornerRadius || 5) * 0.264583}
+                                  fill={processedElement.style.fill}
+                                  fillOpacity={processedElement.style.fillOpacity / 100}
+                                  stroke={processedElement.style.stroke}
+                                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
+                                />
+                              )}
+                              {processedElement.shapeType === 'circle' && (
+                                <ellipse
+                                  cx={widthMm / 2}
+                                  cy={heightMm / 2}
+                                  rx={widthMm / 2}
+                                  ry={heightMm / 2}
+                                  fill={processedElement.style.fill}
+                                  fillOpacity={processedElement.style.fillOpacity / 100}
+                                  stroke={processedElement.style.stroke}
+                                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
+                                />
+                              )}
+                            </svg>
+                          </div>
+                        );
+                      }
+
+                      if (processedElement.type === 'image') {
+                        return (
+                          <img
+                            key={processedElement.id}
+                            src={processedElement.src}
+                            alt={processedElement.alt}
+                            style={{
+                              position: 'absolute',
+                              left,
+                              top,
+                              width,
+                              height,
+                              objectFit: 'contain',
+                              opacity: processedElement.opacity / 100,
+                            }}
+                          />
+                        );
+                      }
+
+                      return null;
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    });
+  };
+
+  // ローディング中
   if (!isLoaded) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -134,6 +506,7 @@ function PrintContent() {
     );
   }
 
+  // 商品がない場合
   if (products.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -153,11 +526,15 @@ function PrintContent() {
     );
   }
 
+  // ==================================================
+  // UIレンダリング
+  // ==================================================
   return (
     <>
-      {/* サブヘッダー */}
-      <div className="bg-white border-b border-border px-4 py-3 flex items-center justify-between print:hidden">
-        <div className="flex items-center gap-4">
+      {/* ===== 上部: 印刷設定バー ===== */}
+      <div className="bg-white border-b border-gray-200 px-4 py-3 print:hidden">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-4 text-sm">
+          {/* 戻るボタン */}
           <button
             onClick={() => router.push(`/edit?template=${templateId}`)}
             className="flex items-center gap-2 text-gray-600 hover:text-primary transition-colors"
@@ -165,114 +542,244 @@ function PrintContent() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            <span className="text-sm">編集に戻る</span>
+            <span>編集に戻る</span>
           </button>
-          <div className="h-6 w-px bg-border" />
-          <div>
-            <h2 className="font-medium text-sm">印刷</h2>
-            <p className="text-xs text-gray-500">
-              {template.name}（{template.width} × {template.height} mm）・{products.length}件の商品ポップ
-            </p>
+
+          <div className="h-6 w-px bg-gray-200" />
+
+          {/* 印刷ページ範囲 */}
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600 font-medium">印刷ページ</span>
+            <span className="font-bold">{currentPage}</span>
+            <span className="text-gray-400">～</span>
+            <span className="font-bold">{layout.totalPages}</span>
           </div>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleDownloadPDF}
-            className="px-4 py-2 border border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors text-sm flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            PDFダウンロード
-          </button>
-          <button
-            onClick={handlePrint}
-            className="btn-primary text-sm py-2 flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-            印刷する
-          </button>
-        </div>
-      </div>
+          <div className="h-6 w-px bg-gray-200" />
 
-      {/* メインコンテンツ */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 print:p-0">
-        {/* 商品ナビゲーション */}
-        {products.length > 1 && (
-          <div className="flex items-center gap-4 mb-6 print:hidden">
-            <button
-              onClick={handlePrev}
-              disabled={currentIndex === 0}
-              className="p-2 rounded-lg border border-border hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div className="text-sm text-gray-600">
-              <span className="font-bold text-primary">{currentIndex + 1}</span>
-              <span className="mx-1">/</span>
-              <span>{products.length}</span>
-              <span className="ml-2 text-gray-400">件</span>
+          {/* 位置調整 */}
+          <div className="flex items-center gap-3">
+            <span className="text-gray-600 font-medium">位置</span>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-500">上に</span>
+              <input
+                type="number"
+                value={offsetY}
+                onChange={(e) => setOffsetY(Number(e.target.value))}
+                className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-xs"
+                step="0.5"
+              />
+              <span className="text-xs text-gray-400">mm</span>
             </div>
-            <button
-              onClick={handleNext}
-              disabled={currentIndex === products.length - 1}
-              className="p-2 rounded-lg border border-border hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-500">右に</span>
+              <input
+                type="number"
+                value={offsetX}
+                onChange={(e) => setOffsetX(Number(e.target.value))}
+                className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-xs"
+                step="0.5"
+              />
+              <span className="text-xs text-gray-400">mm</span>
+            </div>
+          </div>
+
+          <div className="h-6 w-px bg-gray-200" />
+
+          {/* 用紙サイズ */}
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600 font-medium">用紙</span>
+            <select
+              value={paperSize}
+              onChange={(e) => setPaperSize(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-xs"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+              {Object.entries(PAPER_SIZES).map(([key, size]) => (
+                <option key={key} value={key}>
+                  {size.name}（{size.width}×{size.height}mm）
+                </option>
+              ))}
+            </select>
           </div>
-        )}
-
-        {/* プレビュー */}
-        <div ref={printRef} className="print:m-0">
-          <PreviewCanvas
-            template={template}
-            elements={elements}
-            product={currentProduct}
-            taxSettings={taxSettings}
-            zoom={2}
-          />
         </div>
-
-        {/* 商品情報 */}
-        {currentProduct && (
-          <div className="mt-6 text-center print:hidden">
-            <p className="text-sm font-medium text-gray-700">{currentProduct.productName}</p>
-            <p className="text-xs text-gray-500 mt-1">
-              {currentProduct.categoryName && `${currentProduct.categoryName} / `}
-              {currentProduct.maker || currentProduct.groupCode}
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* 印刷用スタイル */}
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          #print-area, #print-area * {
-            visibility: visible;
-          }
-          #print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-          }
-          @page {
-            margin: 0;
-            size: ${template.width}mm ${template.height}mm;
-          }
-        }
-      `}</style>
+      {/* ===== メインコンテンツ ===== */}
+      <div className="flex-1 bg-gray-100 print:bg-white">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          {/* ===== 中央: メインエリア (左=プレビュー、右=情報パネル) ===== */}
+          <div className="flex gap-4">
+
+            {/* --- 左側: A4プレビュー --- */}
+            <div className="flex-1">
+              <div
+                ref={printPagesRef}
+                className="overflow-auto"
+                style={{ maxHeight: 'calc(100vh - 240px)' }}
+              >
+                {renderA4PagePreview(currentPage - 1)}
+              </div>
+
+              {/* ページナビゲーション */}
+              {layout.totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 mt-4">
+                  <button
+                    onClick={handlePrevPage}
+                    disabled={currentPage <= 1}
+                    className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <span className="text-lg font-bold">
+                    {currentPage} / {layout.totalPages}
+                  </span>
+                  <button
+                    onClick={handleNextPage}
+                    disabled={currentPage >= layout.totalPages}
+                    className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* --- 右側: 情報パネル --- */}
+            <div className="w-64 flex-shrink-0 space-y-4 print:hidden">
+
+              {/* アクションボタン */}
+              <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+                <button
+                  onClick={handlePrint}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark font-medium transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  印刷する
+                </button>
+
+                <button
+                  onClick={handleDownloadPDF}
+                  disabled={isGeneratingPDF}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-primary text-primary rounded-lg hover:bg-primary/5 font-medium disabled:opacity-50 transition-colors"
+                >
+                  {isGeneratingPDF ? (
+                    <>
+                      <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      PDF生成中... ({pdfProgress.current}/{pdfProgress.total})
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      PDF書き出し
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* 用紙情報 */}
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
+                  用紙情報
+                </h3>
+                <dl className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">テンプレート</dt>
+                    <dd className="font-medium">{template.name}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">サイズ</dt>
+                    <dd className="font-medium">{templateSize.width} × {templateSize.height} mm</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">用紙</dt>
+                    <dd className="font-medium">{paper.name}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">面数</dt>
+                    <dd className="font-medium">{layout.itemsPerPage}面</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">余白</dt>
+                    <dd className="font-medium">
+                      {layout.marginX.toFixed(1)} × {layout.marginY.toFixed(1)} mm
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              {/* レイアウト情報 */}
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
+                  レイアウト情報
+                </h3>
+                <dl className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">商品数</dt>
+                    <dd className="font-bold text-primary">{products.length}件</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">印刷ページ数</dt>
+                    <dd className="font-bold text-primary">{layout.totalPages}ページ</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">空白フレーム数</dt>
+                    <dd className="font-medium text-gray-700">{layout.emptyFrames}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">配置</dt>
+                    <dd className="font-medium">
+                      {layout.columns}列 × {layout.rows}行
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              {/* 税込価格設定（読み取り専用） */}
+              <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
+                  税込価格設定
+                </h3>
+                <p className="text-sm text-gray-600">
+                  端数処理:
+                  <span className="font-medium ml-1">
+                    {taxSettings.roundingMode === 'floor' ? '切り捨て' :
+                     taxSettings.roundingMode === 'round' ? '四捨五入' : '切り上げ'}
+                  </span>
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  ※ デザイン画面で変更できます
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== 印刷用の非表示レンダリング領域 ===== */}
+      <div
+        id="print-pages-hidden"
+        className="print-only"
+        style={{
+          position: 'fixed',
+          left: '-99999px',
+          top: 0,
+        }}
+      >
+        {renderHiddenPages()}
+      </div>
     </>
   );
 }

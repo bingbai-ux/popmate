@@ -195,12 +195,52 @@ body {
   }
 }
 
+/* ===== 印刷ページ専用スタイル ===== */
+
+/* 画面表示時は非表示 */
+.print-only {
+  display: none;
+}
+
 /* 印刷用スタイル */
 @media print {
-  body * {
-    visibility: hidden;
+  /* 画面用UIをすべて非表示 */
+  body > *:not(#print-pages-hidden) {
+    display: none !important;
   }
 
+  /* 印刷用レンダリング領域を表示 */
+  #print-pages-hidden,
+  .print-only {
+    display: block !important;
+    position: static !important;
+    left: auto !important;
+  }
+
+  /* A4ページ設定 */
+  .a4-print-page {
+    page-break-after: always;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+
+  /* 最後のページの改ページを防止 */
+  .a4-print-page:last-child {
+    page-break-after: auto;
+  }
+
+  /* 用紙設定 */
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  /* 印刷時のポップ枠線を非表示（実際の印刷では不要） */
+  .pop-frame {
+    border: none !important;
+  }
+
+  /* 旧スタイルとの互換性 */
   .print-area,
   .print-area * {
     visibility: visible;
