@@ -44,7 +44,7 @@ export default function PreviewCanvas({
     const updateScale = () => {
       const { clientWidth: cw, clientHeight: ch } = container;
       const availableW = cw - 32;
-      const availableH = ch - 60; // ラベル分
+      const availableH = ch - 32; // 商品名ラベル削除したので余白を減らす
       if (availableW <= 0 || availableH <= 0) return;
 
       const scaleX = availableW / popWidthPx;
@@ -176,15 +176,6 @@ export default function PreviewCanvas({
             {processedElements.map(renderElement)}
           </div>
         </div>
-
-        {/* プレビュー中の商品名 */}
-        {product && (
-          <div className="text-center mt-2">
-            <span className="text-xs text-gray-500 bg-white px-3 py-1 rounded-full border border-border">
-              プレビュー: {product.productName}
-            </span>
-          </div>
-        )}
       </div>
     </div>
   );

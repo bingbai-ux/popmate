@@ -45,6 +45,11 @@ function EditorContent() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [copiedElement, setCopiedElement] = useState<EditorElement | null>(null);
 
+  // プロパティパネルのリサイズ
+  const [panelWidth, setPanelWidth] = useState(288); // 初期幅 w-72 = 288px
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
   // Undo/Redo用の履歴管理
   const [history, setHistory] = useState<EditorElement[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -54,6 +59,37 @@ function EditorContent() {
   const canRedo = historyIndex < history.length - 1;
 
   const selectedElement = elements.find((el) => el.id === selectedElementId) || null;
+
+  // パネルリサイズのマウスイベント
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing || !resizeRef.current) return;
+      const delta = resizeRef.current.startX - e.clientX;
+      const newWidth = Math.min(Math.max(resizeRef.current.startWidth + delta, 200), 500);
+      setPanelWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      resizeRef.current = null;
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeRef.current = { startX: e.clientX, startWidth: panelWidth };
+  };
 
   // 履歴に追加
   const pushHistory = useCallback((newElements: EditorElement[]) => {
@@ -465,8 +501,18 @@ function EditorContent() {
           onUpdateElement={handleUpdateElement}
         />
 
+        {/* リサイズハンドル */}
+        <div
+          className="w-1 bg-transparent hover:bg-primary/20 cursor-col-resize flex-shrink-0 transition-colors"
+          onMouseDown={handleResizeStart}
+          style={{ cursor: isResizing ? 'col-resize' : 'col-resize' }}
+        />
+
         {/* プロパティパネル */}
-        <div className="w-72 flex-shrink-0 border-l border-border bg-white overflow-y-auto">
+        <div
+          className="flex-shrink-0 border-l border-border bg-white overflow-y-auto"
+          style={{ width: panelWidth }}
+        >
           <PropertyPanel
             element={selectedElement}
             onUpdate={handleUpdateElement}

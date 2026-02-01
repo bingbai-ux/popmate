@@ -9,7 +9,7 @@ interface PlaceholderMenuProps {
 
 export default function PlaceholderMenu({ onSelect, onClose }: PlaceholderMenuProps) {
   return (
-    <div className="absolute top-full left-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50 min-w-[200px]">
+    <div className="absolute top-full right-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50 min-w-[200px]">
       <div className="p-2 border-b border-border">
         <span className="text-xs text-gray-500 font-medium">プレースホルダーを挿入</span>
       </div>

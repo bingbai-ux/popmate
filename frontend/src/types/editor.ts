@@ -225,13 +225,13 @@ export const DEFAULT_TAX_SETTINGS: TaxSettings = {
   roundingMode: 'floor',
 };
 
-// プレースホルダー一覧（税込価格追加）
+// プレースホルダー一覧（表示順: 商品コード、カテゴリー、メーカー名、商品名、価格、税込価格、商品説明）
 export const PLACEHOLDERS = [
+  { key: '{{productCode}}', label: '商品コード' },
+  { key: '{{category}}', label: 'カテゴリー' },
+  { key: '{{maker}}', label: 'メーカー名' },
   { key: '{{productName}}', label: '商品名' },
   { key: '{{price}}', label: '価格（税抜）' },
   { key: '{{taxIncludedPrice}}', label: '税込価格' },
   { key: '{{description}}', label: '商品説明' },
-  { key: '{{maker}}', label: 'メーカー名' },
-  { key: '{{category}}', label: 'カテゴリー' },
-  { key: '{{productCode}}', label: '商品コード' },
 ];

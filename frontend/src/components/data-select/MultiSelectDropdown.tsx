@@ -55,19 +55,18 @@ export default function MultiSelectDropdown({
   return (
     <div ref={dropdownRef} className="relative">
       <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+      {/* 3行表示のボタン */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 border border-border rounded-lg text-sm text-left bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary flex items-center justify-between"
+        className="w-full px-3 py-2 border border-border rounded-lg text-sm text-left bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary flex items-start justify-between min-h-[72px]"
       >
-        <span className={selectedLabels.length ? 'text-text-dark' : 'text-gray-400'}>
+        <span className={`flex-1 ${selectedLabels.length ? 'text-text-dark' : 'text-gray-400'} line-clamp-3 leading-5`}>
           {selectedLabels.length > 0
-            ? selectedLabels.length > 2
-              ? `${selectedLabels.slice(0, 2).join(', ')} 他${selectedLabels.length - 2}件`
-              : selectedLabels.join(', ')
+            ? selectedLabels.join(', ')
             : placeholder}
         </span>
-        <svg className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 mt-0.5 ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
