@@ -8,8 +8,8 @@ import ProgressBar from '@/components/ProgressBar';
 import SearchFilters, { SearchFiltersType } from '@/components/data-select/SearchFilters';
 import ProductTable from '@/components/data-select/ProductTable';
 import SelectedProductsSidebar from '@/components/data-select/SelectedProductsSidebar';
-import { Product, Category } from '@/types/product';
-import { fetchProducts } from '@/lib/api';
+import { Product, Category, Supplier } from '@/types/product';
+import { fetchAllProducts, fetchCategoriesWithId, fetchSuppliers } from '@/lib/api';
 import { saveSelectedProducts, loadSelectedProducts } from '@/lib/selectedProductsStorage';
 
 function DataSelectContent() {
@@ -25,31 +25,40 @@ function DataSelectContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // 商品データから動的にカテゴリ・メーカー・仕入れ先を抽出
-  const categories: Category[] = [...new Set(allProducts.map(p => p.categoryName).filter(Boolean))]
-    .map((name, index) => ({
-      categoryId: `CAT${index}`,
-      categoryCode: `CAT${index}`,
-      categoryName: name,
-      level: 1,
-      displaySequence: index,
-    }));
-  // メーカーはmaker列から取得（groupCodeからマッピング済み）
-  const makers = [...new Set(allProducts.map(p => p.maker).filter(Boolean))] as string[];
-  const suppliers = [...new Set(allProducts.map(p => p.groupCode).filter(Boolean))];
+  // カテゴリ・仕入先マスタ（APIから取得）
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
+  // メーカーは商品データのgroupCodeから動的に抽出
+  const makers = [...new Set(allProducts.map(p => p.groupCode).filter(Boolean))] as string[];
 
   const selectedProducts = allProducts.filter(p => selectedIds.includes(p.productId));
 
-  // 初回マウント時に商品データを取得
+  // 初回マウント時にカテゴリ・仕入先・商品データを並行取得
   useEffect(() => {
-    const loadProducts = async () => {
+    const loadData = async () => {
       setIsLoading(true);
       try {
-        const result = await fetchProducts();
-        setAllProducts(result.products);
-        setFilteredProducts(result.products);
-        setDataSource(result.source);
-        console.log(`[data-select] ${result.products.length}件の商品を${result.source}から取得`);
+        // カテゴリ・仕入先・商品を並行取得
+        const [categoriesResult, suppliersResult, productsResult] = await Promise.all([
+          fetchCategoriesWithId(),
+          fetchSuppliers(),
+          fetchAllProducts(),
+        ]);
+
+        // カテゴリ設定（categoryId順でソート済み）
+        setCategories(categoriesResult);
+        console.log(`[data-select] ${categoriesResult.length}件のカテゴリを取得`);
+
+        // 仕入先設定
+        setSuppliers(suppliersResult);
+        console.log(`[data-select] ${suppliersResult.length}件の仕入先を取得`);
+
+        // 商品設定
+        setAllProducts(productsResult.products);
+        setFilteredProducts(productsResult.products);
+        setDataSource(productsResult.source);
+        console.log(`[data-select] ${productsResult.products.length}件の商品を${productsResult.source}から取得`);
 
         // 保存された選択商品を復元
         const savedProducts = loadSelectedProducts(templateId);
@@ -57,19 +66,19 @@ function DataSelectContent() {
           const savedIds = savedProducts.map(p => p.productId);
           // 取得した商品データに存在するIDのみ復元
           const validIds = savedIds.filter(id => 
-            result.products.some(p => p.productId === id)
+            productsResult.products.some(p => p.productId === id)
           );
           setSelectedIds(validIds);
           console.log(`[data-select] ${validIds.length}件の選択商品を復元`);
         }
       } catch (e: any) {
-        console.error('[data-select] 商品データ取得エラー:', e.message);
+        console.error('[data-select] データ取得エラー:', e.message);
       } finally {
         setIsLoading(false);
         setIsInitialized(true);
       }
     };
-    loadProducts();
+    loadData();
   }, [templateId]);
 
   // 選択商品が変更されたら保存（初期化後のみ）
@@ -97,17 +106,20 @@ function DataSelectContent() {
       }
 
       if (filters.categoryIds.length > 0) {
-        // カテゴリ名でフィルタ
-        filtered = filtered.filter(p => filters.categoryIds.includes(p.categoryName));
+        // カテゴリIDでフィルタ
+        filtered = filtered.filter(p => filters.categoryIds.includes(p.categoryId));
       }
 
       if (filters.makerIds.length > 0) {
-        // メーカー（maker列）でフィルタ
-        filtered = filtered.filter(p => p.maker && filters.makerIds.includes(p.maker));
+        // メーカー（groupCode）でフィルタ
+        filtered = filtered.filter(p => p.groupCode && filters.makerIds.includes(p.groupCode));
       }
 
       if (filters.supplierIds.length > 0) {
-        filtered = filtered.filter(p => filters.supplierIds.includes(p.groupCode));
+        // 仕入先IDでフィルタ（supplierIdを使用）
+        // 注: 商品データに仕入先IDがない場合はスキップ
+        // 現状は仕入先フィルタは商品データとの紐付けがないため無効
+        // TODO: 商品データに仕入先IDが追加されたら有効化
       }
 
       setFilteredProducts(filtered);
@@ -164,6 +176,10 @@ function DataSelectContent() {
           {/* データソース表示 */}
           <span className={`text-xs px-2 py-1 rounded ${dataSource === 'smaregi' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
             {dataSource === 'smaregi' ? 'スマレジ連携中' : 'サンプルデータ'}
+          </span>
+          {/* 商品件数表示 */}
+          <span className="text-xs text-gray-500">
+            全{allProducts.length}件
           </span>
         </div>
         <button

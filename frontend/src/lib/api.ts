@@ -1,6 +1,6 @@
 // frontend/src/lib/api.ts
 
-import { Product } from '@/types/product';
+import { Product, Category, Supplier } from '@/types/product';
 
 // ─── 設定 ───
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://popmate-production.up.railway.app';
@@ -104,18 +104,17 @@ export async function checkConnection(): Promise<{
 }
 
 /**
- * 商品一覧を取得
- * - まずバックエンド（スマレジ実データ）を試す
- * - 失敗したらモックデータにフォールバック
+ * 全商品を取得（自動ページネーション）
+ * - バックエンドが全ページを自動取得して返す
  */
-export async function fetchProducts(): Promise<{
+export async function fetchAllProducts(): Promise<{
   products: Product[];
   source: 'smaregi' | 'mock';
 }> {
   try {
-    console.log('[api] 商品データ取得中...', `${API_BASE}/api/smaregi/products`);
+    console.log('[api] 全商品データ取得中...', `${API_BASE}/api/smaregi/products/all`);
 
-    const res = await fetch(`${API_BASE}/api/smaregi/products?limit=1000`, {
+    const res = await fetch(`${API_BASE}/api/smaregi/products/all`, {
       cache: 'no-store',
       headers: { 'Accept': 'application/json' },
     });
@@ -127,13 +126,9 @@ export async function fetchProducts(): Promise<{
     }
 
     const json = await res.json();
-    console.log('[api] レスポンス:', json);
+    console.log('[api] レスポンス総件数:', json.total);
 
-    // バックエンドのレスポンス形式: { success: true, data: [...] }
     const data = json.data || json;
-    console.log('[api] 取得データ件数:', Array.isArray(data) ? data.length : 'not array');
-
-    // スマレジAPIのレスポンスは配列
     const products = Array.isArray(data)
       ? data.map(transformSmaregiProduct)
       : [];
@@ -151,9 +146,20 @@ export async function fetchProducts(): Promise<{
 }
 
 /**
- * カテゴリ一覧を取得
+ * 商品一覧を取得（従来のページネーション版、後方互換性のため残す）
  */
-export async function fetchCategories(): Promise<string[]> {
+export async function fetchProducts(): Promise<{
+  products: Product[];
+  source: 'smaregi' | 'mock';
+}> {
+  // 全件取得版を呼び出す
+  return fetchAllProducts();
+}
+
+/**
+ * カテゴリ一覧を取得（ID付き、categoryId順ソート済み）
+ */
+export async function fetchCategoriesWithId(): Promise<Category[]> {
   try {
     const res = await fetch(`${API_BASE}/api/smaregi/categories`, {
       cache: 'no-store',
@@ -164,7 +170,47 @@ export async function fetchCategories(): Promise<string[]> {
     const json = await res.json();
     const data = json.data || json;
     if (Array.isArray(data)) {
-      return data.map((c: any) => c.categoryName || '').filter(Boolean);
+      return data.map((c: any) => ({
+        categoryId: String(c.categoryId || ''),
+        categoryCode: String(c.categoryCode || ''),
+        categoryName: String(c.categoryName || ''),
+        level: Number(c.level) || 1,
+        parentCategoryId: c.parentCategoryId ? String(c.parentCategoryId) : undefined,
+      }));
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * カテゴリ一覧を取得（名前のみ、後方互換性のため残す）
+ */
+export async function fetchCategories(): Promise<string[]> {
+  const categories = await fetchCategoriesWithId();
+  return categories.map(c => c.categoryName).filter(Boolean);
+}
+
+/**
+ * 仕入先一覧を取得（スマレジ仕入先マスタから）
+ */
+export async function fetchSuppliers(): Promise<Supplier[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/smaregi/suppliers`, {
+      cache: 'no-store',
+    });
+
+    if (!res.ok) return [];
+
+    const json = await res.json();
+    const data = json.data || json;
+    if (Array.isArray(data)) {
+      return data.map((s: any) => ({
+        supplierId: String(s.supplierId || ''),
+        supplierCode: String(s.supplierCode || ''),
+        supplierName: String(s.supplierName || ''),
+      }));
     }
     return [];
   } catch {

@@ -1,22 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { Category } from '@/types/product';
+import { Category, Supplier } from '@/types/product';
 import MultiSelectDropdown from './MultiSelectDropdown';
 
 interface SearchFiltersProps {
   categories: Category[];
-  makers: string[];
-  suppliers: string[];
+  makers: string[];  // メーカーは商品のgroupCodeから抽出した文字列配列
+  suppliers: Supplier[];  // 仕入先はスマレジAPIから取得したSupplier型配列
   onSearch: (filters: SearchFiltersType) => void;
   isLoading: boolean;
 }
 
 export interface SearchFiltersType {
   keyword: string;
-  categoryIds: string[];
-  makerIds: string[];
-  supplierIds: string[];
+  categoryIds: string[];  // カテゴリID（categoryId）
+  makerIds: string[];     // メーカー（groupCode値）
+  supplierIds: string[];  // 仕入先ID（supplierId）
 }
 
 export default function SearchFilters({
@@ -47,9 +47,23 @@ export default function SearchFilters({
     onSearch({ keyword: '', categoryIds: [], makerIds: [], supplierIds: [] });
   };
 
-  const categoryOptions = categories.map(c => ({ value: c.categoryId, label: c.categoryName }));
-  const makerOptions = makers.map(m => ({ value: m, label: m }));
-  const supplierOptions = suppliers.map(s => ({ value: s, label: s }));
+  // カテゴリオプション（categoryIdをvalueに、categoryNameをlabelに）
+  const categoryOptions = categories.map(c => ({ 
+    value: c.categoryId, 
+    label: c.categoryName 
+  }));
+
+  // メーカーオプション（groupCode値をそのままvalueとlabelに）
+  const makerOptions = makers.map(m => ({ 
+    value: m, 
+    label: m 
+  }));
+
+  // 仕入先オプション（supplierIdをvalueに、supplierNameをlabelに）
+  const supplierOptions = suppliers.map(s => ({ 
+    value: s.supplierId, 
+    label: s.supplierName 
+  }));
 
   return (
     <div className="bg-white rounded-lg border border-border p-4">
@@ -67,22 +81,47 @@ export default function SearchFilters({
         </div>
 
         <div className="w-48">
-          <MultiSelectDropdown label="カテゴリ" options={categoryOptions} selectedValues={categoryIds} onChange={setCategoryIds} placeholder="すべて" />
+          <MultiSelectDropdown 
+            label="カテゴリ" 
+            options={categoryOptions} 
+            selectedValues={categoryIds} 
+            onChange={setCategoryIds} 
+            placeholder="すべて" 
+          />
         </div>
 
         <div className="w-48">
-          <MultiSelectDropdown label="メーカー" options={makerOptions} selectedValues={makerIds} onChange={setMakerIds} placeholder="すべて" />
+          <MultiSelectDropdown 
+            label="メーカー" 
+            options={makerOptions} 
+            selectedValues={makerIds} 
+            onChange={setMakerIds} 
+            placeholder="すべて" 
+          />
         </div>
 
         <div className="w-48">
-          <MultiSelectDropdown label="仕入れ先" options={supplierOptions} selectedValues={supplierIds} onChange={setSupplierIds} placeholder="すべて" />
+          <MultiSelectDropdown 
+            label="仕入れ先" 
+            options={supplierOptions} 
+            selectedValues={supplierIds} 
+            onChange={setSupplierIds} 
+            placeholder="すべて" 
+          />
         </div>
 
         <div className="flex items-end gap-2">
-          <button onClick={handleSearch} disabled={isLoading} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50">
+          <button 
+            onClick={handleSearch} 
+            disabled={isLoading} 
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50"
+          >
             {isLoading ? '検索中...' : '検索'}
           </button>
-          <button onClick={handleClear} className="px-4 py-2 border border-border text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+          <button 
+            onClick={handleClear} 
+            className="px-4 py-2 border border-border text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+          >
             クリア
           </button>
         </div>

@@ -134,6 +134,12 @@ export interface SmaregiCategory {
   parentCategoryId?: string;
 }
 
+export interface SmaregiSupplier {
+  supplierId: string;
+  supplierCode: string;
+  supplierName: string;
+}
+
 // ===== API Response Types =====
 export interface ApiResponse<T> {
   success: boolean;

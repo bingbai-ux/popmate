@@ -23,6 +23,12 @@ export interface Category {
   parentCategoryId?: string;
 }
 
+export interface Supplier {
+  supplierId: string;
+  supplierCode: string;
+  supplierName: string;
+}
+
 export interface ProductSearchParams {
   keyword?: string;
   categoryId?: string;
