@@ -58,6 +58,8 @@ export interface BarcodeSettings {
   fontSize: number;
   lineColor: string;
   background: string;
+  height: number;             // バーコードの高さ（px）
+  width: number;              // バーコードの線幅（1-4）
 }
 
 // QRコード設定
@@ -203,6 +205,8 @@ export const DEFAULT_BARCODE_SETTINGS: BarcodeSettings = {
   fontSize: 12,
   lineColor: '#000000',
   background: '#FFFFFF',
+  height: 50,
+  width: 2,
 };
 
 // デフォルトQRコード設定

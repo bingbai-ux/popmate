@@ -53,8 +53,8 @@ export default function BarcodeElement({
           fontSize: element.settings.fontSize * scale,
           lineColor: element.settings.lineColor,
           background: element.settings.background,
-          width: 2,
-          height: 50 * scale,
+          width: element.settings.width || 2,
+          height: (element.settings.height || 50) * scale,
           margin: 5,
         });
       }

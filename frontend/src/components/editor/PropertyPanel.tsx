@@ -277,6 +277,39 @@ export default function PropertyPanel({
                 className="w-full h-10 border border-border rounded cursor-pointer"
               />
             </div>
+
+            {/* バーコードの高さ */}
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-2">バーコードの高さ</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="20"
+                  max="150"
+                  value={element.settings.height || 50}
+                  onChange={(e) => onUpdate(element.id, { settings: { ...element.settings, height: parseInt(e.target.value) } } as Partial<BarcodeElement>)}
+                  className="flex-1"
+                />
+                <span className="text-sm text-gray-600 w-12 text-right">{element.settings.height || 50}px</span>
+              </div>
+            </div>
+
+            {/* バーコードの線幅 */}
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-2">バーコードの線幅（サイズ）</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="1"
+                  max="4"
+                  step="1"
+                  value={element.settings.width || 2}
+                  onChange={(e) => onUpdate(element.id, { settings: { ...element.settings, width: parseInt(e.target.value) } } as Partial<BarcodeElement>)}
+                  className="flex-1"
+                />
+                <span className="text-sm text-gray-600 w-8 text-right">{element.settings.width || 2}</span>
+              </div>
+            </div>
           </>
         )}
 

@@ -200,9 +200,9 @@ function EditContent() {
         <ResizableSplit
           className="flex-1 overflow-hidden"
           direction="vertical"
-          initialRatio={45}
-          minRatio={25}
-          maxRatio={75}
+          initialSize={350}
+          minSize={200}
+          maxSize={600}
           topContent={
             <div className="h-full p-6 bg-white/50">
               <div className="flex items-center justify-between mb-3">

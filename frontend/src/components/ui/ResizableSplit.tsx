@@ -9,63 +9,67 @@ interface ResizableSplitProps {
   bottomContent: ReactNode;
   /** 分割方向 */
   direction?: 'horizontal' | 'vertical';
-  /** 初期の上部（または左部）の比率（0-100） */
-  initialRatio?: number;
-  /** 最小比率（0-100） */
-  minRatio?: number;
-  /** 最大比率（0-100） */
-  maxRatio?: number;
-  /** 比率変更時のコールバック */
-  onRatioChange?: (ratio: number) => void;
+  /** 初期の上部（または左部）の高さ/幅（px） */
+  initialSize?: number;
+  /** 最小サイズ（px） */
+  minSize?: number;
+  /** 最大サイズ（px） */
+  maxSize?: number;
+  /** サイズ変更時のコールバック */
+  onSizeChange?: (size: number) => void;
   /** コンテナのクラス名 */
   className?: string;
 }
 
 /**
  * リサイズ可能な分割パネルコンポーネント
+ * 上部（プレビュー）の高さを固定値で管理し、下部（テーブル）が残りを埋める
  */
 export function ResizableSplit({
   topContent,
   bottomContent,
   direction = 'vertical',
-  initialRatio = 50,
-  minRatio = 20,
-  maxRatio = 80,
-  onRatioChange,
+  initialSize = 400,
+  minSize = 200,
+  maxSize = 800,
+  onSizeChange,
   className = '',
 }: ResizableSplitProps) {
-  const [ratio, setRatio] = useState(initialRatio);
+  const [topSize, setTopSize] = useState(initialSize);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const startPosRef = useRef(0);
+  const startSizeRef = useRef(0);
 
   // ドラッグ開始
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
-  }, []);
+    if (direction === 'vertical') {
+      startPosRef.current = e.clientY;
+    } else {
+      startPosRef.current = e.clientX;
+    }
+    startSizeRef.current = topSize;
+  }, [direction, topSize]);
 
   // ドラッグ中
   useEffect(() => {
     if (!isDragging) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return;
-
-      const rect = containerRef.current.getBoundingClientRect();
-      let newRatio: number;
-
+      let delta: number;
       if (direction === 'vertical') {
-        // 縦分割: 上下
-        newRatio = ((e.clientY - rect.top) / rect.height) * 100;
+        delta = e.clientY - startPosRef.current;
       } else {
-        // 横分割: 左右
-        newRatio = ((e.clientX - rect.left) / rect.width) * 100;
+        delta = e.clientX - startPosRef.current;
       }
 
+      let newSize = startSizeRef.current + delta;
       // 範囲制限
-      newRatio = Math.max(minRatio, Math.min(maxRatio, newRatio));
-      setRatio(newRatio);
-      onRatioChange?.(newRatio);
+      newSize = Math.max(minSize, Math.min(maxSize, newSize));
+      setTopSize(newSize);
+      onSizeChange?.(newSize);
     };
 
     const handleMouseUp = () => {
@@ -79,7 +83,7 @@ export function ResizableSplit({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, direction, minRatio, maxRatio, onRatioChange]);
+  }, [isDragging, direction, minSize, maxSize, onSizeChange]);
 
   const isVertical = direction === 'vertical';
 
@@ -89,11 +93,11 @@ export function ResizableSplit({
       className={`flex ${isVertical ? 'flex-col' : 'flex-row'} ${className}`}
       style={{ cursor: isDragging ? (isVertical ? 'row-resize' : 'col-resize') : 'default' }}
     >
-      {/* 上部（または左部） */}
+      {/* 上部（または左部）- 固定サイズ */}
       <div
+        className="flex-shrink-0 overflow-auto"
         style={{
-          [isVertical ? 'height' : 'width']: `${ratio}%`,
-          overflow: 'auto',
+          [isVertical ? 'height' : 'width']: `${topSize}px`,
         }}
       >
         {topContent}
@@ -102,30 +106,24 @@ export function ResizableSplit({
       {/* リサイズハンドル */}
       <div
         className={`
-          flex-shrink-0 bg-gray-200 hover:bg-blue-400 transition-colors
-          ${isVertical ? 'h-1.5 cursor-row-resize' : 'w-1.5 cursor-col-resize'}
-          ${isDragging ? 'bg-blue-500' : ''}
+          flex-shrink-0 bg-gray-100 hover:bg-blue-200 transition-colors relative
+          ${isVertical ? 'h-2 cursor-row-resize' : 'w-2 cursor-col-resize'}
+          ${isDragging ? 'bg-blue-400' : ''}
         `}
         onMouseDown={handleMouseDown}
       >
         {/* ハンドルのビジュアルインジケーター */}
         <div
           className={`
-            flex items-center justify-center h-full w-full
-            ${isVertical ? 'flex-row' : 'flex-col'}
+            absolute inset-0 flex items-center justify-center
           `}
         >
-          <div className={`bg-gray-400 rounded-full ${isVertical ? 'w-8 h-0.5' : 'h-8 w-0.5'}`} />
+          <div className={`bg-gray-400 rounded-full ${isVertical ? 'w-10 h-1' : 'h-10 w-1'}`} />
         </div>
       </div>
 
-      {/* 下部（または右部） */}
-      <div
-        style={{
-          [isVertical ? 'height' : 'width']: `${100 - ratio}%`,
-          overflow: 'auto',
-        }}
-      >
+      {/* 下部（または右部）- 残りを埋める */}
+      <div className="flex-1 overflow-auto min-h-0">
         {bottomContent}
       </div>
     </div>
