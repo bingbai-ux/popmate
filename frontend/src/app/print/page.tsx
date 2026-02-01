@@ -351,77 +351,89 @@ function PrintContent() {
   return (
     <div className="min-h-screen bg-gray-100 print-root">
 
-      {/* ===== メインコンテンツ（印刷時は非表示） ===== */}
-      <div className="no-print">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex gap-4">
+      <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="flex gap-4">
 
-            {/* --- 左側: A4プレビュー --- */}
-            <div className="flex-1" ref={previewContainerRef}>
-              <div
-                className="overflow-auto"
-                style={{ 
-                  maxHeight: 'calc(100vh - 200px)',
-                  '--preview-scale': previewScale,
-                } as React.CSSProperties}
-              >
-                {/* 現在表示中のページのみ表示（画面用） */}
-                <div
-                  className="a4-page"
-                  style={{
-                    width: '210mm',
-                    height: '297mm',
-                    position: 'relative',
-                    backgroundColor: '#ffffff',
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-                    margin: '0 auto',
-                    transform: `scale(${previewScale})`,
-                    transformOrigin: 'top center',
-                    marginBottom: `calc(-297mm * (1 - ${previewScale}) + 20px)`,
-                  }}
-                >
-                  {/* グリッドセル */}
-                  {Array.from({ length: layout.rows }, (_, row) =>
-                    Array.from({ length: layout.columns }, (_, col) => {
-                      const itemIdx = row * layout.columns + col;
-                      const startIdx = displayPage * layout.itemsPerPage;
-                      const product = products[startIdx + itemIdx];
+          {/* === 左側: A4プレビュー === */}
+          <div className="flex-1" ref={previewContainerRef}>
 
-                      return (
-                        <div
-                          key={`cell-${row}-${col}`}
-                          className="pop-cell"
-                          style={{
-                            position: 'absolute',
-                            left: `${layout.marginX + col * (templateSize.width + layout.gapX) + offsetX}mm`,
-                            top: `${layout.marginY + row * (templateSize.height + layout.gapY) + offsetY}mm`,
-                            width: `${templateSize.width}mm`,
-                            height: `${templateSize.height}mm`,
-                          }}
-                        >
-                          {product ? (
-                            <div className={`pop-frame ${showBorders ? 'pop-border' : ''}`} style={{
-                              width: '100%',
-                              height: '100%',
-                              position: 'relative',
-                              overflow: 'hidden',
-                              boxSizing: 'border-box',
-                            }}>
-                              {renderPopContent(product)}
-                            </div>
-                          ) : (
-                            <div className="empty-frame">
-                              <span>空白</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
+            {/* A4ページ群 — このdiv全体が画面・印刷で共用 */}
+            <div
+              id="print-pages"
+              className="overflow-auto"
+              style={{ maxHeight: 'calc(100vh - 200px)' }}
+            >
+              {/* ★ 全ページをレンダリング（現在ページ以外は visibility: hidden） */}
+              {Array.from({ length: layout.totalPages }, (_, pageIndex) => {
+                const startIdx = pageIndex * layout.itemsPerPage;
+                const pageProducts = products.slice(
+                  startIdx,
+                  Math.min(startIdx + layout.itemsPerPage, products.length)
+                );
+                const isCurrentPage = pageIndex === displayPage;
 
-              {/* ページナビゲーション */}
+                return (
+                  <div
+                    key={`page-${pageIndex}`}
+                    className={`a4-page ${!isCurrentPage ? 'hidden-page' : ''}`}
+                    data-page-index={pageIndex}
+                    style={isCurrentPage ? {
+                      /* 画面表示: 縮小 */
+                      transform: `scale(${previewScale})`,
+                      transformOrigin: 'top center',
+                      marginBottom: `calc(-297mm * (1 - ${previewScale}) + 20px)`,
+                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                      margin: '0 auto',
+                    } : {
+                      /* 非表示ページ: transform は設定するが visibility: hidden で隠す */
+                      transform: `scale(${previewScale})`,
+                      transformOrigin: 'top center',
+                    }}
+                  >
+                    {/* グリッドセル */}
+                    {Array.from({ length: layout.rows }, (_, row) =>
+                      Array.from({ length: layout.columns }, (_, col) => {
+                        const itemIdx = row * layout.columns + col;
+                        const product = pageProducts[itemIdx];
+
+                        return (
+                          <div
+                            key={`cell-${row}-${col}`}
+                            className="pop-cell"
+                            style={{
+                              position: 'absolute',
+                              left: `${layout.marginX + col * (templateSize.width + layout.gapX) + offsetX}mm`,
+                              top: `${layout.marginY + row * (templateSize.height + layout.gapY) + offsetY}mm`,
+                              width: `${templateSize.width}mm`,
+                              height: `${templateSize.height}mm`,
+                            }}
+                          >
+                            {product ? (
+                              <div className={`pop-frame ${showBorders ? 'pop-border' : ''}`} style={{
+                                width: '100%',
+                                height: '100%',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                boxSizing: 'border-box',
+                              }}>
+                                {renderPopContent(product)}
+                              </div>
+                            ) : (
+                              <div className="empty-frame">
+                                <span>空白</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ページナビゲーション */}
+            <div className="no-print">
               {layout.totalPages > 1 && (
                 <div className="flex items-center justify-center gap-4 mt-4">
                   <button
@@ -448,286 +460,229 @@ function PrintContent() {
                 </div>
               )}
             </div>
-
-            {/* --- 右側: 情報パネル --- */}
-            <div className="w-64 flex-shrink-0 space-y-4">
-
-              {/* アクションボタン */}
-              <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
-                <button
-                  onClick={handlePrint}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                  </svg>
-                  印刷する
-                </button>
-
-                <button
-                  onClick={handleDownloadPDF}
-                  disabled={isGeneratingPDF}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 font-medium disabled:opacity-50 transition-colors"
-                >
-                  {isGeneratingPDF ? (
-                    <>
-                      <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      PDF生成中... ({pdfProgress.current}/{pdfProgress.total})
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      PDF書き出し
-                    </>
-                  )}
-                </button>
-
-                {/* ★ 保存ボタン */}
-                <button
-                  onClick={() => setShowSaveModal(true)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-green-600 text-green-600 rounded-lg hover:bg-green-50 font-medium transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                  </svg>
-                  {currentProjectId ? '上書き保存' : '保存データに保存'}
-                </button>
-
-                {currentProjectName && (
-                  <p className="text-xs text-gray-500 text-center">
-                    プロジェクト: {currentProjectName}
-                  </p>
-                )}
-              </div>
-
-              {/* 印刷設定パネル */}
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
-                  印刷設定
-                </h3>
-
-                <div className="space-y-3">
-                  {/* 枠あり印刷 */}
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showBorders}
-                      onChange={(e) => setShowBorders(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">枠あり印刷</span>
-                  </label>
-
-                  {showBorders && (
-                    <p className="text-xs text-gray-400 ml-6">
-                      カット位置の目安として薄いグレー線を印刷します
-                    </p>
-                  )}
-
-                  {/* 位置調整 */}
-                  <div className="pt-2 border-t border-gray-100">
-                    <p className="text-xs text-gray-500 font-medium mb-2">位置調整</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-xs text-gray-400">上下</label>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            value={offsetY}
-                            onChange={(e) => setOffsetY(Number(e.target.value))}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-center"
-                            step="0.5"
-                          />
-                          <span className="text-xs text-gray-400 flex-shrink-0">mm</span>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-400">左右</label>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            value={offsetX}
-                            onChange={(e) => setOffsetX(Number(e.target.value))}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-center"
-                            step="0.5"
-                          />
-                          <span className="text-xs text-gray-400 flex-shrink-0">mm</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 用紙サイズ */}
-                  <div className="pt-2 border-t border-gray-100">
-                    <p className="text-xs text-gray-500 font-medium mb-2">用紙サイズ</p>
-                    <select
-                      value={paperSize}
-                      onChange={(e) => setPaperSize(e.target.value)}
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-                    >
-                      {Object.entries(PAPER_SIZES).map(([key, size]) => (
-                        <option key={key} value={key}>
-                          {size.name}（{size.width}×{size.height}mm）
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* 用紙情報 */}
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
-                  用紙情報
-                </h3>
-                <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">テンプレート</dt>
-                    <dd className="font-medium">{template.name}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">サイズ</dt>
-                    <dd className="font-medium">{templateSize.width} × {templateSize.height} mm</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">用紙</dt>
-                    <dd className="font-medium">{paper.name}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">面数</dt>
-                    <dd className="font-medium">{layout.itemsPerPage}面</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">余白</dt>
-                    <dd className="font-medium">
-                      {layout.marginX.toFixed(1)} × {layout.marginY.toFixed(1)} mm
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-
-              {/* レイアウト情報 */}
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
-                  レイアウト情報
-                </h3>
-                <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">商品数</dt>
-                    <dd className="font-bold text-blue-600">{products.length}件</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">印刷ページ数</dt>
-                    <dd className="font-bold text-blue-600">{layout.totalPages}ページ</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">空白フレーム数</dt>
-                    <dd className="font-medium text-gray-700">{layout.emptyFrames}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">配置</dt>
-                    <dd className="font-medium">
-                      {layout.columns}列 × {layout.rows}行
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-
-              {/* 税込価格設定（読み取り専用） */}
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
-                  税込価格設定
-                </h3>
-                <p className="text-sm text-gray-600">
-                  端数処理:
-                  <span className="font-medium ml-1">
-                    {taxSettings.roundingMode === 'floor' ? '切り捨て' :
-                     taxSettings.roundingMode === 'round' ? '四捨五入' : '切り上げ'}
-                  </span>
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  ※ デザイン画面で変更できます
-                </p>
-              </div>
-
-              {/* 戻るボタン */}
-              <button
-                onClick={() => router.push(`/edit?template=${templateId}`)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                編集に戻る
-              </button>
-            </div>
           </div>
-        </div>
-      </div>
 
-      {/* ===== A4ページ群（印刷時に実寸出力） ===== */}
-      <div id="print-area" className="print-area">
-        {Array.from({ length: layout.totalPages }, (_, pageIndex) => {
-          const startIdx = pageIndex * layout.itemsPerPage;
-          const pageProducts = products.slice(
-            startIdx,
-            Math.min(startIdx + layout.itemsPerPage, products.length)
-          );
+          {/* === 右側: 情報パネル（印刷時は非表示） === */}
+          <div className="w-64 flex-shrink-0 space-y-4 no-print">
 
-          return (
-            <div
-              key={`page-${pageIndex}`}
-              className={`a4-page ${pageIndex !== displayPage ? 'hidden-page' : ''}`}
-              data-page-index={pageIndex}
-            >
-              {/* グリッドセル */}
-              {Array.from({ length: layout.rows }, (_, row) =>
-                Array.from({ length: layout.columns }, (_, col) => {
-                  const itemIdx = row * layout.columns + col;
-                  const product = pageProducts[itemIdx];
+            {/* アクションボタン */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+              <button
+                onClick={handlePrint}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                印刷する
+              </button>
 
-                  return (
-                    <div
-                      key={`cell-${row}-${col}`}
-                      className="pop-cell"
-                      style={{
-                        position: 'absolute',
-                        left: `${layout.marginX + col * (templateSize.width + layout.gapX) + offsetX}mm`,
-                        top: `${layout.marginY + row * (templateSize.height + layout.gapY) + offsetY}mm`,
-                        width: `${templateSize.width}mm`,
-                        height: `${templateSize.height}mm`,
-                      }}
-                    >
-                      {product ? (
-                        <div className={`pop-frame ${showBorders ? 'pop-border' : ''}`} style={{
-                          width: '100%',
-                          height: '100%',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          boxSizing: 'border-box',
-                        }}>
-                          {renderPopContent(product)}
-                        </div>
-                      ) : (
-                        <div className="empty-frame">
-                          <span>空白</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+              <button
+                onClick={handleDownloadPDF}
+                disabled={isGeneratingPDF}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 font-medium disabled:opacity-50 transition-colors"
+              >
+                {isGeneratingPDF ? (
+                  <>
+                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    PDF生成中... ({pdfProgress.current}/{pdfProgress.total})
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    PDF書き出し
+                  </>
+                )}
+              </button>
+
+              {/* ★ 保存ボタン */}
+              <button
+                onClick={() => setShowSaveModal(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-green-600 text-green-600 rounded-lg hover:bg-green-50 font-medium transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                </svg>
+                {currentProjectId ? '上書き保存' : '保存データに保存'}
+              </button>
+
+              {currentProjectName && (
+                <p className="text-xs text-gray-500 text-center">
+                  プロジェクト: {currentProjectName}
+                </p>
               )}
             </div>
-          );
-        })}
+
+            {/* 印刷設定パネル */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
+                印刷設定
+              </h3>
+
+              <div className="space-y-3">
+                {/* 枠あり印刷 */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showBorders}
+                    onChange={(e) => setShowBorders(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">枠あり印刷</span>
+                </label>
+
+                {showBorders && (
+                  <p className="text-xs text-gray-400 ml-6">
+                    カット位置の目安として薄いグレー線を印刷します
+                  </p>
+                )}
+
+                {/* 位置調整 */}
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-xs text-gray-500 font-medium mb-2">位置調整</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-gray-400">上下</label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={offsetY}
+                          onChange={(e) => setOffsetY(Number(e.target.value))}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-center"
+                          step="0.5"
+                        />
+                        <span className="text-xs text-gray-400 flex-shrink-0">mm</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400">左右</label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={offsetX}
+                          onChange={(e) => setOffsetX(Number(e.target.value))}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-xs text-center"
+                          step="0.5"
+                        />
+                        <span className="text-xs text-gray-400 flex-shrink-0">mm</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 用紙サイズ */}
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-xs text-gray-500 font-medium mb-2">用紙サイズ</p>
+                  <select
+                    value={paperSize}
+                    onChange={(e) => setPaperSize(e.target.value)}
+                    className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                  >
+                    {Object.entries(PAPER_SIZES).map(([key, size]) => (
+                      <option key={key} value={key}>
+                        {size.name}（{size.width}×{size.height}mm）
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* 用紙情報 */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
+                用紙情報
+              </h3>
+              <dl className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">テンプレート</dt>
+                  <dd className="font-medium">{template.name}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">サイズ</dt>
+                  <dd className="font-medium">{templateSize.width} × {templateSize.height} mm</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">用紙</dt>
+                  <dd className="font-medium">{paper.name}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">面数</dt>
+                  <dd className="font-medium">{layout.itemsPerPage}面</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">余白</dt>
+                  <dd className="font-medium">
+                    {layout.marginX.toFixed(1)} × {layout.marginY.toFixed(1)} mm
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            {/* レイアウト情報 */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
+                レイアウト情報
+              </h3>
+              <dl className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">商品数</dt>
+                  <dd className="font-bold text-blue-600">{products.length}件</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">印刷ページ数</dt>
+                  <dd className="font-bold text-blue-600">{layout.totalPages}ページ</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">空白フレーム数</dt>
+                  <dd className="font-medium text-gray-700">{layout.emptyFrames}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">配置</dt>
+                  <dd className="font-medium">
+                    {layout.columns}列 × {layout.rows}行
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            {/* 税込価格設定（読み取り専用） */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h3 className="text-sm font-bold text-gray-700 mb-3 pb-2 border-b border-gray-100">
+                税込価格設定
+              </h3>
+              <p className="text-sm text-gray-600">
+                端数処理:
+                <span className="font-medium ml-1">
+                  {taxSettings.roundingMode === 'floor' ? '切り捨て' :
+                   taxSettings.roundingMode === 'round' ? '四捨五入' : '切り上げ'}
+                </span>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                ※ デザイン画面で変更できます
+              </p>
+            </div>
+
+            {/* 戻るボタン */}
+            <button
+              onClick={() => router.push(`/edit?template=${templateId}`)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              編集に戻る
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 保存モーダル */}

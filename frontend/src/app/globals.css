@@ -127,7 +127,7 @@ body {
 }
 
 /* エディターのモバイル対応 */
-@media (max-width: 1024px) {
+@media (min-width: 1024px) {
   .editor-canvas-responsive {
     max-width: 100%;
     overflow: auto;
@@ -197,11 +197,6 @@ body {
 
 /* ===== 印刷ページ専用スタイル ===== */
 
-/* 画面表示時のA4ページ（印刷領域） */
-.print-area {
-  display: none;
-}
-
 /* A4ページ基本スタイル */
 .a4-page {
   width: 210mm;
@@ -237,9 +232,15 @@ body {
   font-size: 12px;
 }
 
-/* 非表示ページ（画面表示時） */
+/* ★ 非表示ページ（画面表示時）— display: none ではなく visibility で隠す */
 .hidden-page {
-  display: none;
+  visibility: hidden;
+  height: 0 !important;
+  overflow: hidden;
+  margin: 0 !important;
+  padding: 0 !important;
+  /* ★ transform の margin 調整も無効化 */
+  margin-bottom: 0 !important;
 }
 
 /* ===== 印刷用スタイル ===== */
@@ -255,16 +256,6 @@ body {
     display: none !important;
   }
 
-  /* 印刷領域を表示 */
-  .print-area {
-    display: block !important;
-  }
-
-  /* 非表示ページも印刷時は表示 */
-  .hidden-page {
-    display: block !important;
-  }
-
   /* 背景色を強制的に印刷 */
   .print-root {
     background: white !important;
@@ -272,7 +263,14 @@ body {
     print-color-adjust: exact !important;
   }
 
-  /* A4ページ印刷設定 */
+  /* ★ 非表示ページを印刷時に復元 */
+  .hidden-page {
+    visibility: visible !important;
+    height: 297mm !important;
+    overflow: visible !important;
+  }
+
+  /* ★ A4ページ印刷設定 — transform を解除して実寸出力 */
   .a4-page {
     width: 210mm !important;
     height: 297mm !important;
@@ -281,7 +279,7 @@ body {
     box-shadow: none !important;
     margin: 0 !important;
     padding: 0 !important;
-    transform: none !important;
+    transform: none !important;        /* ★ 縮小を解除 → 実寸 */
     page-break-after: always;
     page-break-inside: avoid;
     -webkit-print-color-adjust: exact !important;
@@ -314,5 +312,12 @@ body {
 
   .empty-frame span {
     display: none !important;
+  }
+
+  /* ★ 印刷ページコンテナのスタイルリセット */
+  #print-pages {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
   }
 }

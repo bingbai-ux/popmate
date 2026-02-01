@@ -1,13 +1,10 @@
 /**
  * PDF出力ユーティリティ
- * A4レイアウト対応、日本語フォント対策済み
  * 
- * 方式: 画面のA4ページ要素を一時的に実寸に拡大してキャプチャ
+ * 方式: 画面上のA4ページ要素の transform を一時解除してキャプチャ
+ * ★ display: none は一切使わない
  */
 
-/**
- * PDF出力オプション
- */
 export interface PdfExportOptions {
   filename?: string;
   quality?: number;       // 0.1 - 1.0
@@ -16,7 +13,7 @@ export interface PdfExportOptions {
 
 /**
  * A4レイアウトのPDFを生成
- * #print-area 内のA4ページ要素をキャプチャ
+ * #print-pages 内のA4ページ要素をキャプチャ
  */
 export async function exportA4PDF(
   options: PdfExportOptions = {}
@@ -36,20 +33,22 @@ export async function exportA4PDF(
   // フォントの読み込みを待機（日本語文字化け対策）
   await document.fonts.ready;
 
-  // #print-area 内のA4ページを取得
-  const printArea = document.getElementById('print-area');
-  if (!printArea) {
-    throw new Error('印刷領域が見つかりません');
+  // ★ #print-pages 内のA4ページを取得（display: none ではない）
+  const printPages = document.getElementById('print-pages');
+  if (!printPages) {
+    throw new Error('印刷ページコンテナ (#print-pages) が見つかりません');
   }
 
-  const pages = printArea.querySelectorAll<HTMLElement>('.a4-page');
+  const pages = printPages.querySelectorAll<HTMLElement>('.a4-page');
   if (pages.length === 0) {
-    throw new Error('印刷用ページが見つかりません');
+    throw new Error('印刷用ページ (.a4-page) が見つかりません');
   }
 
   // A4サイズ（mm）
   const A4_WIDTH_MM = 210;
   const A4_HEIGHT_MM = 297;
+  // mm → px 変換係数 (96dpi)
+  const MM_TO_PX = 3.7795;
 
   // PDFを作成
   const pdf = new jsPDF({
@@ -58,49 +57,68 @@ export async function exportA4PDF(
     format: [A4_WIDTH_MM, A4_HEIGHT_MM],
   });
 
-  // 各ページをキャプチャしてPDFに追加
-  for (let i = 0; i < pages.length; i++) {
-    const page = pages[i];
+  // ★ 全ページの元のスタイルを保存
+  const originalStyles: Array<{
+    cssText: string;
+    className: string;
+  }> = [];
 
-    // 進捗コールバック
-    onProgress?.(i + 1, pages.length);
+  // ★ まず全ページを実寸表示に変更
+  pages.forEach((page, i) => {
+    originalStyles.push({
+      cssText: page.style.cssText,
+      className: page.className,
+    });
 
-    // 元のスタイルを保存
-    const originalStyle = page.style.cssText;
-    const originalClass = page.className;
+    // transform を解除し、実寸で表示
+    page.style.transform = 'none';
+    page.style.transformOrigin = 'top left';
+    page.style.margin = '0';
+    page.style.marginBottom = '0';
+    page.style.boxShadow = 'none';
+    page.style.position = 'relative';
+    page.style.width = `${A4_WIDTH_MM}mm`;
+    page.style.height = `${A4_HEIGHT_MM}mm`;
 
-    // 一時的に実寸表示に変更
-    page.style.cssText = `
-      position: fixed !important;
-      left: 0 !important;
-      top: 0 !important;
-      width: 210mm !important;
-      height: 297mm !important;
-      z-index: 99999 !important;
-      background: white !important;
-      transform: none !important;
-      display: block !important;
-      visibility: visible !important;
-    `;
-    page.className = 'a4-page';
+    // hidden-page を一時的に解除（visibility: visible にする）
+    if (page.classList.contains('hidden-page')) {
+      page.classList.remove('hidden-page');
+      page.style.visibility = 'visible';
+      page.style.height = `${A4_HEIGHT_MM}mm`;
+      page.style.overflow = 'visible';
+      page.dataset.wasHidden = 'true';
+    }
+  });
 
-    // 少し待機してスタイル適用を確実にする
-    await new Promise(resolve => setTimeout(resolve, 150));
+  // ★ レイアウト再計算を確実に待機
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  await new Promise(resolve => setTimeout(resolve, 200));
 
-    try {
-      // html2canvasでキャプチャ
-      // 高解像度でキャプチャ（scale: 2 = 300dpi相当）
+  try {
+    // 各ページをキャプチャしてPDFに追加
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
+
+      // 進捗コールバック
+      onProgress?.(i + 1, pages.length);
+
+      // ★ html2canvas でキャプチャ
       const canvas = await html2canvas(page, {
-        scale: 2,
+        scale: 2,                              // 150dpi相当
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
         allowTaint: true,
         foreignObjectRendering: false,
-        width: A4_WIDTH_MM * 3.7795, // mm to px (96dpi)
-        height: A4_HEIGHT_MM * 3.7795,
-        windowWidth: A4_WIDTH_MM * 3.7795,
-        windowHeight: A4_HEIGHT_MM * 3.7795,
+        width: Math.round(A4_WIDTH_MM * MM_TO_PX),
+        height: Math.round(A4_HEIGHT_MM * MM_TO_PX),
+        windowWidth: Math.round(A4_WIDTH_MM * MM_TO_PX),
+        windowHeight: Math.round(A4_HEIGHT_MM * MM_TO_PX),
+        // ★ 要素の実際の位置・サイズを使用
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
       });
 
       // キャンバスを画像データに変換
@@ -113,161 +131,19 @@ export async function exportA4PDF(
 
       // 画像を追加（用紙全体に配置）
       pdf.addImage(imgData, 'JPEG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
-    } finally {
-      // 元のスタイルに戻す
-      page.style.cssText = originalStyle;
-      page.className = originalClass;
     }
-  }
-
-  // PDFをダウンロード
-  pdf.save(filename);
-}
-
-/**
- * 従来の方式: 複数のポップ要素をPDFとして出力
- */
-export async function exportToPdf(
-  elements: HTMLElement[],
-  options: {
-    filename?: string;
-    quality?: number;
-    margin?: number;
-    orientation?: 'portrait' | 'landscape';
-    pageSize?: 'a4' | 'a3' | 'letter';
-  } = {}
-): Promise<void> {
-  const {
-    filename = 'pops.pdf',
-    quality = 0.95,
-    margin = 10,
-    orientation = 'portrait',
-    pageSize = 'a4',
-  } = options;
-
-  // Dynamic import でSSRエラーを回避
-  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-    import('html2canvas'),
-    import('jspdf'),
-  ]);
-
-  // フォントの読み込みを待機
-  await document.fonts.ready;
-
-  // PDFを作成
-  const pdf = new jsPDF({
-    orientation,
-    unit: 'mm',
-    format: pageSize,
-  });
-
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const contentWidth = pageWidth - margin * 2;
-  const contentHeight = pageHeight - margin * 2;
-
-  for (let i = 0; i < elements.length; i++) {
-    const element = elements[i];
-
-    // 要素をキャンバスに変換
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
+  } finally {
+    // ★ 全ページの元のスタイルを復元
+    pages.forEach((page, i) => {
+      const original = originalStyles[i];
+      if (original) {
+        page.style.cssText = original.cssText;
+        page.className = original.className;
+      }
+      // data属性を削除
+      delete page.dataset.wasHidden;
     });
-
-    // キャンバスを画像データに変換
-    const imgData = canvas.toDataURL('image/jpeg', quality);
-
-    // アスペクト比を維持してサイズを計算
-    const imgWidth = canvas.width;
-    const imgHeight = canvas.height;
-    const ratio = Math.min(contentWidth / imgWidth, contentHeight / imgHeight);
-    const scaledWidth = imgWidth * ratio;
-    const scaledHeight = imgHeight * ratio;
-
-    // 中央配置
-    const x = margin + (contentWidth - scaledWidth) / 2;
-    const y = margin + (contentHeight - scaledHeight) / 2;
-
-    // 2ページ目以降は新しいページを追加
-    if (i > 0) {
-      pdf.addPage();
-    }
-
-    // 画像を追加
-    pdf.addImage(imgData, 'JPEG', x, y, scaledWidth, scaledHeight);
   }
-
-  // PDFをダウンロード
-  pdf.save(filename);
-}
-
-/**
- * 単一のポップ要素をPDFとして出力
- */
-export async function exportSingleToPdf(
-  element: HTMLElement,
-  options: {
-    filename?: string;
-    quality?: number;
-    margin?: number;
-    orientation?: 'portrait' | 'landscape';
-    pageSize?: 'a4' | 'a3' | 'letter';
-  } = {}
-): Promise<void> {
-  return exportToPdf([element], options);
-}
-
-/**
- * ポップサイズに合わせたPDF出力（実寸）
- */
-export async function exportActualSize(
-  element: HTMLElement,
-  popWidth: number,
-  popHeight: number,
-  options: {
-    filename?: string;
-    quality?: number;
-    margin?: number;
-  } = {}
-): Promise<void> {
-  const {
-    filename = 'pop.pdf',
-    quality = 0.95,
-    margin = 0,
-  } = options;
-
-  // Dynamic import でSSRエラーを回避
-  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-    import('html2canvas'),
-    import('jspdf'),
-  ]);
-
-  // フォントの読み込みを待機
-  await document.fonts.ready;
-
-  // ポップサイズに合わせたPDFを作成
-  const pdf = new jsPDF({
-    orientation: popWidth > popHeight ? 'landscape' : 'portrait',
-    unit: 'mm',
-    format: [popWidth + margin * 2, popHeight + margin * 2],
-  });
-
-  // 要素をキャンバスに変換
-  const canvas = await html2canvas(element, {
-    scale: 3,
-    useCORS: true,
-    backgroundColor: '#ffffff',
-    logging: false,
-  });
-
-  // キャンバスを画像データに変換
-  const imgData = canvas.toDataURL('image/jpeg', quality);
-
-  // 画像を追加
-  pdf.addImage(imgData, 'JPEG', margin, margin, popWidth, popHeight);
 
   // PDFをダウンロード
   pdf.save(filename);
