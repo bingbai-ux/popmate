@@ -204,20 +204,21 @@ function EditContent() {
           minSize={200}
           maxSize={600}
           topContent={
-            <div className="h-full p-6 bg-white/50">
-              <div className="flex items-center justify-between mb-3">
+            <div className="h-full flex flex-col p-4 bg-white/50">
+              <div className="flex items-center justify-between mb-2 flex-shrink-0">
                 <h3 className="font-bold text-sm text-text-dark">プレビュー</h3>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <span>←→ 商品テーブルの行をクリックで切替</span>
                 </div>
               </div>
-              <PreviewCanvas
-                template={template}
-                elements={elements}
-                product={selectedProduct}
-                taxSettings={taxSettings}
-                zoom={1.5}
-              />
+              <div className="flex-1 min-h-0">
+                <PreviewCanvas
+                  template={template}
+                  elements={elements}
+                  product={selectedProduct}
+                  taxSettings={taxSettings}
+                />
+              </div>
             </div>
           }
           bottomContent={

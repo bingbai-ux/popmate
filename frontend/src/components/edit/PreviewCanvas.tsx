@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { EditorElement, TemplateConfig, TaxSettings } from '@/types/editor';
 import { Product } from '@/types/product';
 import { replaceElementPlaceholders } from '@/lib/placeholderUtils';
@@ -20,7 +20,39 @@ export default function PreviewCanvas({
   taxSettings,
   zoom = 1,
 }: PreviewCanvasProps) {
-  const mmToPx = (mm: number) => mm * 3.78 * zoom;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [autoZoom, setAutoZoom] = useState(zoom);
+
+  // 親コンテナに合わせてズームを自動計算
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width: cw, height: ch } = entry.contentRect;
+        // パディングとラベル分を差し引く
+        const availableW = cw - 48; // p-6 * 2
+        const availableH = ch - 80; // p-6 * 2 + label
+        if (availableW <= 0 || availableH <= 0) return;
+
+        const popW = template.width * 3.78;
+        const popH = template.height * 3.78;
+        if (popW <= 0 || popH <= 0) return;
+
+        const scaleX = availableW / popW;
+        const scaleY = availableH / popH;
+        const fitZoom = Math.min(scaleX, scaleY, 3); // 最大3倍
+        setAutoZoom(Math.max(0.5, fitZoom)); // 最小0.5倍
+      }
+    });
+
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, [template.width, template.height]);
+
+  const effectiveZoom = autoZoom;
+  const mmToPx = (mm: number) => mm * 3.78 * effectiveZoom;
 
   // プレースホルダーを置換した要素を生成
   const processedElements = useMemo(() => {
@@ -55,6 +87,8 @@ export default function PreviewCanvas({
               textDecoration: element.style.textDecoration,
               writingMode: element.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
               whiteSpace: element.style.autoWrap ? 'pre-wrap' : 'nowrap',
+              wordBreak: 'keep-all',
+              overflowWrap: 'break-word',
               overflow: 'hidden',
             }}
           >
@@ -107,7 +141,7 @@ export default function PreviewCanvas({
   };
 
   return (
-    <div className="flex items-center justify-center bg-gray-100 p-6 rounded-lg overflow-auto">
+    <div ref={containerRef} className="flex items-center justify-center bg-gray-100 p-6 rounded-lg overflow-auto h-full">
       <div className="relative">
         <div
           className="bg-white shadow-lg relative"

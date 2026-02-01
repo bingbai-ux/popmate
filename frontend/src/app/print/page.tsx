@@ -232,6 +232,8 @@ function PrintContent() {
               overflow: 'hidden',
               whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
               writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+              wordBreak: 'keep-all',
+              overflowWrap: 'break-word',
             }}
           >
             {processedElement.content}
@@ -701,8 +703,10 @@ function PrintContent() {
 export default function PrintPage() {
   return (
     <main className="min-h-screen bg-background-light flex flex-col">
-      <Header />
-      <ProgressBar currentStep={5} />
+      <div className="no-print">
+        <Header />
+        <ProgressBar currentStep={5} />
+      </div>
       <Suspense fallback={<div className="min-h-screen flex items-center justify-center">読み込み中...</div>}>
         <PrintContent />
       </Suspense>
