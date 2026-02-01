@@ -25,7 +25,6 @@ function DataSelectContent() {
 
   // ─── 商品データ（検索結果） ───
   const [searchResults, setSearchResults] = useState<Product[]>([]);
-  const [dataSource, setDataSource] = useState<'smaregi' | 'mock'>('mock');
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -90,7 +89,6 @@ function DataSelectContent() {
       });
 
       setSearchResults(result.products);
-      setDataSource(result.source);
       console.log(`[data-select] 検索結果: ${result.products.length}件 (${result.source})`);
     } catch (e: any) {
       console.error('[data-select] 検索エラー:', e.message);
@@ -158,12 +156,6 @@ function DataSelectContent() {
             </svg>
             <span className="text-sm">デザイン編集に戻る</span>
           </Link>
-          {/* データソース表示（検索後のみ） */}
-          {hasSearched && (
-            <span className={`text-xs px-2 py-1 rounded ${dataSource === 'smaregi' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-              {dataSource === 'smaregi' ? 'スマレジ連携中' : 'サンプルデータ'}
-            </span>
-          )}
           {hasSearched && (
             <span className="text-xs text-gray-500">
               検索結果: {searchResults.length}件

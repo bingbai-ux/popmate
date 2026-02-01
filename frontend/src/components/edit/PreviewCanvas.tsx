@@ -13,46 +13,49 @@ interface PreviewCanvasProps {
   zoom?: number;
 }
 
+/**
+ * プレビューキャンバス
+ * 
+ * 方式: 固定倍率(BASE_ZOOM)で内部描画 → CSS transform: scale() で表示サイズに合わせる
+ * → テキスト・図形・画像の比率が常にデザイン時と同一になる
+ */
 export default function PreviewCanvas({
   template,
   elements,
   product,
   taxSettings,
-  zoom = 1,
 }: PreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [autoZoom, setAutoZoom] = useState(zoom);
+  const [cssScale, setCssScale] = useState(1);
 
-  // 親コンテナに合わせてズームを自動計算
+  // 固定の内部描画倍率（この倍率でレンダリングし、CSSで拡縮する）
+  const BASE_ZOOM = 2;
+  const mmToPx = (mm: number) => mm * 3.78 * BASE_ZOOM;
+
+  // ポップの実ピクセルサイズ（BASE_ZOOM倍率）
+  const popWidthPx = mmToPx(template.width);
+  const popHeightPx = mmToPx(template.height);
+
+  // 親コンテナに合わせてCSS scaleを自動計算
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width: cw, height: ch } = entry.contentRect;
-        // パディングとラベル分を差し引く
-        const availableW = cw - 48; // p-6 * 2
-        const availableH = ch - 80; // p-6 * 2 + label
-        if (availableW <= 0 || availableH <= 0) return;
+    const updateScale = () => {
+      const { clientWidth: cw, clientHeight: ch } = container;
+      const availableW = cw - 32;
+      const availableH = ch - 60; // ラベル分
+      if (availableW <= 0 || availableH <= 0) return;
 
-        const popW = template.width * 3.78;
-        const popH = template.height * 3.78;
-        if (popW <= 0 || popH <= 0) return;
+      const scaleX = availableW / popWidthPx;
+      const scaleY = availableH / popHeightPx;
+      setCssScale(Math.min(scaleX, scaleY, 2));
+    };
 
-        const scaleX = availableW / popW;
-        const scaleY = availableH / popH;
-        const fitZoom = Math.min(scaleX, scaleY, 3); // 最大3倍
-        setAutoZoom(Math.max(0.5, fitZoom)); // 最小0.5倍
-      }
-    });
-
+    const resizeObserver = new ResizeObserver(updateScale);
     resizeObserver.observe(container);
     return () => resizeObserver.disconnect();
-  }, [template.width, template.height]);
-
-  const effectiveZoom = autoZoom;
-  const mmToPx = (mm: number) => mm * 3.78 * effectiveZoom;
+  }, [popWidthPx, popHeightPx]);
 
   // プレースホルダーを置換した要素を生成
   const processedElements = useMemo(() => {
@@ -76,7 +79,7 @@ export default function PreviewCanvas({
               left, top, width, height,
               zIndex: element.zIndex,
               fontFamily: element.style.fontFamily,
-              fontSize: element.style.fontSize * zoom,
+              fontSize: element.style.fontSize * BASE_ZOOM,
               fontWeight: element.style.fontWeight,
               fontStyle: element.style.fontStyle,
               color: element.style.color,
@@ -140,27 +143,43 @@ export default function PreviewCanvas({
     }
   };
 
+  // transform後の見た目サイズ
+  const displayW = popWidthPx * cssScale;
+  const displayH = popHeightPx * cssScale;
+
   return (
-    <div ref={containerRef} className="flex items-center justify-center bg-gray-100 p-6 rounded-lg overflow-auto h-full">
-      <div className="relative">
+    <div ref={containerRef} className="flex items-center justify-center bg-gray-100 p-4 rounded-lg h-full overflow-hidden">
+      <div className="flex flex-col items-center">
+        {/* ポップ本体: 固定サイズで描画 → CSS scaleで表示調整 */}
         <div
-          className="bg-white shadow-lg relative"
-          style={{ width: mmToPx(template.width), height: mmToPx(template.height) }}
+          style={{
+            width: displayW,
+            height: displayH,
+          }}
         >
-          {/* グリッド */}
           <div
-            className="absolute inset-0 pointer-events-none opacity-10"
+            className="bg-white shadow-lg relative origin-top-left"
             style={{
-              backgroundImage: `linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)`,
-              backgroundSize: `${mmToPx(5)}px ${mmToPx(5)}px`,
+              width: popWidthPx,
+              height: popHeightPx,
+              transform: `scale(${cssScale})`,
             }}
-          />
-          {processedElements.map(renderElement)}
+          >
+            {/* グリッド */}
+            <div
+              className="absolute inset-0 pointer-events-none opacity-10"
+              style={{
+                backgroundImage: `linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)`,
+                backgroundSize: `${mmToPx(5)}px ${mmToPx(5)}px`,
+              }}
+            />
+            {processedElements.map(renderElement)}
+          </div>
         </div>
 
         {/* プレビュー中の商品名 */}
         {product && (
-          <div className="text-center mt-3">
+          <div className="text-center mt-2">
             <span className="text-xs text-gray-500 bg-white px-3 py-1 rounded-full border border-border">
               プレビュー: {product.productName}
             </span>

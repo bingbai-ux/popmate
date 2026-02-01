@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Product } from '@/types/product';
 import { EditorElement } from '@/types/editor';
 import { getUsedColumns, calculateTaxIncludedPrice, formatPriceNumber } from '@/lib/placeholderUtils';
@@ -31,7 +31,7 @@ export function ProductDataTable({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
     const widths: Record<string, number> = {};
     usedColumns.forEach(col => {
-      widths[col.key] = col.key === 'productName' ? 250 : col.key === 'description' ? 200 : 120;
+      widths[col.key] = col.key === 'productName' ? 200 : col.key === 'description' ? 350 : 100;
     });
     return widths;
   });
@@ -39,26 +39,42 @@ export function ProductDataTable({
   // 展開中の行
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
-  // リサイズ中の状態
-  const [resizing, setResizing] = useState<{ key: string; startX: number; startWidth: number } | null>(null);
-  const tableRef = useRef<HTMLDivElement>(null);
+  // リサイズ中の状態（refで管理してグローバルイベントで使う）
+  const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
 
+  // リサイズ開始
   const handleResizeStart = useCallback((e: React.MouseEvent, key: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setResizing({ key, startX: e.clientX, startWidth: columnWidths[key] || 120 });
+    resizingRef.current = { key, startX: e.clientX, startWidth: columnWidths[key] || 120 };
+    setIsResizing(true);
   }, [columnWidths]);
 
-  const handleResizeMove = useCallback((e: React.MouseEvent) => {
-    if (!resizing) return;
-    const diff = e.clientX - resizing.startX;
-    const newWidth = Math.max(60, resizing.startWidth + diff);
-    setColumnWidths(prev => ({ ...prev, [resizing.key]: newWidth }));
-  }, [resizing]);
+  // グローバルマウスイベントでリサイズ処理（テーブル外にマウスが出ても追従する）
+  useEffect(() => {
+    if (!isResizing) return;
 
-  const handleResizeEnd = useCallback(() => {
-    setResizing(null);
-  }, []);
+    const handleMouseMove = (e: MouseEvent) => {
+      const r = resizingRef.current;
+      if (!r) return;
+      const diff = e.clientX - r.startX;
+      const newWidth = Math.max(60, r.startWidth + diff);
+      setColumnWidths(prev => ({ ...prev, [r.key]: newWidth }));
+    };
+
+    const handleMouseUp = () => {
+      resizingRef.current = null;
+      setIsResizing(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   // 行の展開/折りたたみ
   const toggleRowExpand = useCallback((index: number, e: React.MouseEvent) => {
@@ -107,33 +123,37 @@ export function ProductDataTable({
     return <div className="text-center py-8 text-gray-500">商品データがありません</div>;
   }
 
+  // テーブルの総幅を計算
+  const totalWidth = 32 + 40 + usedColumns.reduce((sum, col) => sum + (columnWidths[col.key] || 120), 0);
+
   return (
     <div
-      ref={tableRef}
       className="overflow-auto border border-gray-200 rounded-lg bg-white"
-      onMouseMove={resizing ? handleResizeMove : undefined}
-      onMouseUp={resizing ? handleResizeEnd : undefined}
-      onMouseLeave={resizing ? handleResizeEnd : undefined}
-      style={{ cursor: resizing ? 'col-resize' : 'default' }}
+      style={{ cursor: isResizing ? 'col-resize' : 'default' }}
     >
-      <table className="border-collapse" style={{ tableLayout: 'fixed', minWidth: '100%' }}>
+      <table style={{ width: totalWidth, tableLayout: 'fixed', borderCollapse: 'collapse' }}>
+        <colgroup>
+          <col style={{ width: 32 }} />
+          <col style={{ width: 40 }} />
+          {usedColumns.map(col => (
+            <col key={col.key} style={{ width: columnWidths[col.key] || 120 }} />
+          ))}
+        </colgroup>
         <thead className="bg-gray-50 sticky top-0 z-10">
           <tr>
-            {/* 展開ボタン列 */}
-            <th className="w-8 px-1 py-2 text-center text-xs font-medium text-gray-500 border-b border-gray-200" />
-            {/* 行番号列 */}
-            <th className="w-10 px-2 py-2 text-center text-xs font-medium text-gray-500 border-b border-gray-200">
+            <th className="px-1 py-2 text-center text-xs font-medium text-gray-500 border-b border-gray-200" />
+            <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 border-b border-gray-200">
               #
             </th>
-            {usedColumns.map((col, colIndex) => (
+            {usedColumns.map((col) => (
               <th
                 key={col.key}
                 className="relative px-3 py-2 text-left text-xs font-medium text-gray-600 border-b border-gray-200 select-none"
-                style={{ width: columnWidths[col.key] || 120 }}
               >
                 <span className="truncate block">{col.label}</span>
+                {/* リサイズハンドル */}
                 <div
-                  className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-400 transition-colors"
+                  className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors z-20"
                   onMouseDown={(e) => handleResizeStart(e, col.key)}
                 />
               </th>
@@ -175,8 +195,7 @@ export function ProductDataTable({
                 {usedColumns.map((col) => (
                   <td
                     key={col.key}
-                    className="px-3 py-2 text-sm text-left border-b border-gray-100"
-                    style={{ width: columnWidths[col.key] || 120 }}
+                    className="px-3 py-2 text-sm text-left border-b border-gray-100 overflow-hidden"
                   >
                     {isEditable(col.key) && onEditProduct ? (
                       isExpanded ? (
