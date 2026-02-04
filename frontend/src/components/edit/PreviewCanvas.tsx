@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { EditorElement, TemplateConfig, TaxSettings } from '@/types/editor';
 import { Product } from '@/types/product';
-import { replaceElementPlaceholders } from '@/lib/placeholderUtils';
+import { replaceAllElementsWithSummarize } from '@/lib/placeholderUtils';
+import { applyKinsoku } from '@/lib/textUtils';
 
 interface PreviewCanvasProps {
   template: TemplateConfig;
@@ -15,7 +16,7 @@ interface PreviewCanvasProps {
 
 /**
  * プレビューキャンバス
- * 
+ *
  * 方式: 固定倍率(BASE_ZOOM)で内部描画 → CSS transform: scale() で表示サイズに合わせる
  * → テキスト・図形・画像の比率が常にデザイン時と同一になる
  */
@@ -27,6 +28,8 @@ export default function PreviewCanvas({
 }: PreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [cssScale, setCssScale] = useState(1);
+  const [processedElements, setProcessedElements] = useState<EditorElement[]>(elements);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // 固定の内部描画倍率（この倍率でレンダリングし、CSSで拡縮する）
   const BASE_ZOOM = 2;
@@ -44,7 +47,7 @@ export default function PreviewCanvas({
     const updateScale = () => {
       const { clientWidth: cw, clientHeight: ch } = container;
       const availableW = cw - 32;
-      const availableH = ch - 32; // 商品名ラベル削除したので余白を減らす
+      const availableH = ch - 32;
       if (availableW <= 0 || availableH <= 0) return;
 
       const scaleX = availableW / popWidthPx;
@@ -57,10 +60,34 @@ export default function PreviewCanvas({
     return () => resizeObserver.disconnect();
   }, [popWidthPx, popHeightPx]);
 
-  // プレースホルダーを置換した要素を生成
-  const processedElements = useMemo(() => {
-    if (!product) return elements;
-    return elements.map((el) => replaceElementPlaceholders(el, product, taxSettings));
+  // プレースホルダーを置換（AI省略付き）
+  useEffect(() => {
+    if (!product) {
+      setProcessedElements(elements);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsProcessing(true);
+
+    replaceAllElementsWithSummarize(elements, product, taxSettings)
+      .then((result) => {
+        if (!isCancelled) {
+          setProcessedElements(result);
+          setIsProcessing(false);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to process elements:', error);
+        if (!isCancelled) {
+          setProcessedElements(elements);
+          setIsProcessing(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [elements, product, taxSettings]);
 
   const renderElement = (element: EditorElement) => {
@@ -71,6 +98,8 @@ export default function PreviewCanvas({
 
     switch (element.type) {
       case 'text':
+        // 禁則処理を適用
+        const processedContent = applyKinsoku(element.content);
         return (
           <div
             key={element.id}
@@ -91,11 +120,11 @@ export default function PreviewCanvas({
               writingMode: element.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
               whiteSpace: element.style.autoWrap ? 'pre-wrap' : 'nowrap',
               wordBreak: 'keep-all',
-              overflowWrap: 'break-word',
+              overflowWrap: 'anywhere',
               overflow: 'hidden',
             }}
           >
-            {element.content}
+            {processedContent}
           </div>
         );
 
@@ -173,6 +202,18 @@ export default function PreviewCanvas({
                 backgroundSize: `${mmToPx(5)}px ${mmToPx(5)}px`,
               }}
             />
+            {/* 処理中インジケーター */}
+            {isProcessing && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-50">
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>AI処理中...</span>
+                </div>
+              </div>
+            )}
             {processedElements.map(renderElement)}
           </div>
         </div>

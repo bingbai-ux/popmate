@@ -32,7 +32,6 @@ export default function PropertyPanel({
 }: PropertyPanelProps) {
   const [showPlaceholders, setShowPlaceholders] = useState(false);
   const [fontCategory, setFontCategory] = useState<'all' | 'japanese' | 'english'>('all');
-  const [isSummarizing, setIsSummarizing] = useState(false);
 
   // テキスト要素の文字数カウント
   const textCapacity = useMemo(() => {
@@ -81,38 +80,6 @@ export default function PropertyPanel({
     onUpdate(element.id, { content: element.content + placeholder } as Partial<TextElement>);
   };
 
-  // AI文章省略機能
-  const handleSummarize = async () => {
-    if (!element || element.type !== 'text' || !textCapacity) return;
-    if (element.content.length <= textCapacity.chars) return; // すでに収まっている場合はスキップ
-
-    setIsSummarizing(true);
-    try {
-      const response = await fetch('/api/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: element.content,
-          maxChars: textCapacity.chars,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('要約に失敗しました');
-      }
-
-      const data = await response.json();
-      if (data.summarized) {
-        onUpdate(element.id, { content: data.summarized } as Partial<TextElement>);
-      }
-    } catch (error) {
-      console.error('Summarize error:', error);
-      alert('要約に失敗しました');
-    } finally {
-      setIsSummarizing(false);
-    }
-  };
-
   return (
     <div className="h-full overflow-y-auto">
       <div className="sticky top-0 bg-white p-4 border-b border-border flex items-center justify-between z-10">
@@ -159,31 +126,6 @@ export default function PropertyPanel({
                   </div>
                   {!textCapacity.isOverflow && textCapacity.remaining <= 10 && textCapacity.remaining > 0 && (
                     <div className="mt-1 text-orange-500">残り{textCapacity.remaining}文字</div>
-                  )}
-                  {/* AI省略ボタン（文字数オーバー時のみ表示） */}
-                  {textCapacity.isOverflow && (
-                    <button
-                      onClick={handleSummarize}
-                      disabled={isSummarizing}
-                      className="mt-2 w-full py-1.5 px-3 bg-purple-500 text-white rounded-lg text-xs font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
-                    >
-                      {isSummarizing ? (
-                        <>
-                          <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span>省略中...</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          <span>AIで文章を省略</span>
-                        </>
-                      )}
-                    </button>
                   )}
                 </div>
               )}

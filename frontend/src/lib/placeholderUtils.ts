@@ -1,5 +1,6 @@
 import { Product } from '@/types/product';
-import { TaxSettings, EditorElement } from '@/types/editor';
+import { TaxSettings, EditorElement, TextElement } from '@/types/editor';
+import { estimateTextCapacity } from './textUtils';
 
 /**
  * 税込価格を計算
@@ -109,6 +110,105 @@ export function replaceElementPlaceholders(
     cloned.settings.value = replacePlaceholders(cloned.settings.value, product, taxSettings);
   }
   return cloned;
+}
+
+/**
+ * AI要約APIを呼び出してテキストを省略
+ */
+async function summarizeText(text: string, maxChars: number): Promise<string> {
+  try {
+    const response = await fetch('/api/summarize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, maxChars }),
+    });
+
+    if (!response.ok) {
+      console.error('Summarize API error:', response.status);
+      return text.substring(0, maxChars - 1) + '…';
+    }
+
+    const data = await response.json();
+    return data.summarized || text.substring(0, maxChars - 1) + '…';
+  } catch (error) {
+    console.error('Summarize error:', error);
+    return text.substring(0, maxChars - 1) + '…';
+  }
+}
+
+/**
+ * 商品説明の要約結果をキャッシュ
+ */
+const summaryCache = new Map<string, string>();
+
+/**
+ * 要素内のプレースホルダーを置換（商品説明の自動AI省略付き）
+ */
+export async function replaceElementPlaceholdersWithSummarize(
+  element: EditorElement,
+  product: Product,
+  taxSettings: TaxSettings
+): Promise<EditorElement> {
+  const cloned = JSON.parse(JSON.stringify(element)) as EditorElement;
+
+  if (cloned.type === 'text' && cloned.content) {
+    const textElement = cloned as TextElement;
+    const hasDescription = textElement.content.includes('{{description}}');
+
+    // 通常のプレースホルダー置換
+    textElement.content = replacePlaceholders(textElement.content, product, taxSettings);
+
+    // 商品説明が含まれている場合、テキストボックスに収まるか確認
+    if (hasDescription && product.description) {
+      const capacity = estimateTextCapacity(
+        textElement.size.width,
+        textElement.size.height,
+        textElement.style.fontSize,
+        textElement.style.lineHeight,
+        textElement.style.letterSpacing,
+        textElement.style.writingMode === 'vertical'
+      );
+
+      // テキストが収まらない場合、AI省略を適用
+      if (textElement.content.length > capacity.chars) {
+        // キャッシュキー: 商品ID + 最大文字数
+        const cacheKey = `${product.productId || product.productCode}-${capacity.chars}`;
+
+        if (summaryCache.has(cacheKey)) {
+          // キャッシュから取得
+          const cachedSummary = summaryCache.get(cacheKey)!;
+          textElement.content = textElement.content.replace(product.description, cachedSummary);
+        } else {
+          // AI省略を実行
+          const summarized = await summarizeText(product.description, capacity.chars);
+          summaryCache.set(cacheKey, summarized);
+          textElement.content = textElement.content.replace(product.description, summarized);
+        }
+      }
+    }
+  }
+
+  if (cloned.type === 'barcode' && (cloned as any).settings?.value) {
+    (cloned as any).settings.value = replacePlaceholders((cloned as any).settings.value, product, taxSettings);
+  }
+  if (cloned.type === 'qrcode' && (cloned as any).settings?.value) {
+    (cloned as any).settings.value = replacePlaceholders((cloned as any).settings.value, product, taxSettings);
+  }
+
+  return cloned;
+}
+
+/**
+ * 複数の要素を一括でプレースホルダー置換（AI省略付き）
+ */
+export async function replaceAllElementsWithSummarize(
+  elements: EditorElement[],
+  product: Product,
+  taxSettings: TaxSettings
+): Promise<EditorElement[]> {
+  return Promise.all(
+    elements.map(element => replaceElementPlaceholdersWithSummarize(element, product, taxSettings))
+  );
 }
 
 /**
