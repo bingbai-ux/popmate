@@ -401,6 +401,78 @@ function EditorContent() {
     }
   }, [selectedElementId]);
 
+  // レイヤー操作: 最前面へ
+  const handleBringToFront = useCallback((id: string) => {
+    setElements((prev) => {
+      const maxZIndex = Math.max(...prev.map(el => el.zIndex));
+      return prev.map(el =>
+        el.id === id ? { ...el, zIndex: maxZIndex + 1 } : el
+      );
+    });
+  }, []);
+
+  // レイヤー操作: 前面へ
+  const handleBringForward = useCallback((id: string) => {
+    setElements((prev) => {
+      const target = prev.find(el => el.id === id);
+      if (!target) return prev;
+
+      // 現在より1つ上のzIndexを持つ要素を探す
+      const sortedByZIndex = [...prev].sort((a, b) => a.zIndex - b.zIndex);
+      const currentIndex = sortedByZIndex.findIndex(el => el.id === id);
+
+      if (currentIndex === sortedByZIndex.length - 1) {
+        // 既に最前面の場合
+        return prev;
+      }
+
+      const nextElement = sortedByZIndex[currentIndex + 1];
+
+      // zIndexを入れ替え
+      return prev.map(el => {
+        if (el.id === id) return { ...el, zIndex: nextElement.zIndex };
+        if (el.id === nextElement.id) return { ...el, zIndex: target.zIndex };
+        return el;
+      });
+    });
+  }, []);
+
+  // レイヤー操作: 背面へ
+  const handleSendBackward = useCallback((id: string) => {
+    setElements((prev) => {
+      const target = prev.find(el => el.id === id);
+      if (!target) return prev;
+
+      // 現在より1つ下のzIndexを持つ要素を探す
+      const sortedByZIndex = [...prev].sort((a, b) => a.zIndex - b.zIndex);
+      const currentIndex = sortedByZIndex.findIndex(el => el.id === id);
+
+      if (currentIndex === 0) {
+        // 既に最背面の場合
+        return prev;
+      }
+
+      const prevElement = sortedByZIndex[currentIndex - 1];
+
+      // zIndexを入れ替え
+      return prev.map(el => {
+        if (el.id === id) return { ...el, zIndex: prevElement.zIndex };
+        if (el.id === prevElement.id) return { ...el, zIndex: target.zIndex };
+        return el;
+      });
+    });
+  }, []);
+
+  // レイヤー操作: 最背面へ
+  const handleSendToBack = useCallback((id: string) => {
+    setElements((prev) => {
+      const minZIndex = Math.min(...prev.map(el => el.zIndex));
+      return prev.map(el =>
+        el.id === id ? { ...el, zIndex: minZIndex - 1 } : el
+      );
+    });
+  }, []);
+
   // ズーム
   const handleZoomIn = () => setZoom((prev) => Math.min(prev + 0.25, 3));
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 0.25, 0.25));
@@ -519,6 +591,10 @@ function EditorContent() {
             onDelete={handleDeleteElement}
             roundingMethod={roundingMethod}
             onRoundingChange={setRoundingMethod}
+            onBringToFront={handleBringToFront}
+            onBringForward={handleBringForward}
+            onSendBackward={handleSendBackward}
+            onSendToBack={handleSendToBack}
           />
         </div>
       </div>
