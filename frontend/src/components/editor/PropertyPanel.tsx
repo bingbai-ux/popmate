@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { EditorElement, TextElement, ShapeElement, LineElement, BarcodeElement, QRCodeElement, TextStyle, BarcodeSettings, QRCodeSettings } from '@/types/editor';
 import PlaceholderMenu from './PlaceholderMenu';
 import FontSelector from './FontSelector';
 import type { RoundingMethod } from '@/lib/api';
+import { estimateTextCapacity } from '@/lib/textUtils';
 
 interface PropertyPanelProps {
   element: EditorElement | null;
@@ -31,6 +32,28 @@ export default function PropertyPanel({
 }: PropertyPanelProps) {
   const [showPlaceholders, setShowPlaceholders] = useState(false);
   const [fontCategory, setFontCategory] = useState<'all' | 'japanese' | 'english'>('all');
+  const [isSummarizing, setIsSummarizing] = useState(false);
+
+  // テキスト要素の文字数カウント
+  const textCapacity = useMemo(() => {
+    if (!element || element.type !== 'text') return null;
+    const capacity = estimateTextCapacity(
+      element.size.width,
+      element.size.height,
+      element.style.fontSize,
+      element.style.lineHeight,
+      element.style.letterSpacing,
+      element.style.writingMode === 'vertical'
+    );
+    const currentLength = element.content.length;
+    const remaining = capacity.chars - currentLength;
+    return {
+      ...capacity,
+      currentLength,
+      remaining,
+      isOverflow: remaining < 0,
+    };
+  }, [element]);
 
   if (!element) {
     return (
@@ -56,6 +79,38 @@ export default function PropertyPanel({
   const insertPlaceholder = (placeholder: string) => {
     if (element.type !== 'text') return;
     onUpdate(element.id, { content: element.content + placeholder } as Partial<TextElement>);
+  };
+
+  // AI文章省略機能
+  const handleSummarize = async () => {
+    if (!element || element.type !== 'text' || !textCapacity) return;
+    if (element.content.length <= textCapacity.chars) return; // すでに収まっている場合はスキップ
+
+    setIsSummarizing(true);
+    try {
+      const response = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: element.content,
+          maxChars: textCapacity.chars,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('要約に失敗しました');
+      }
+
+      const data = await response.json();
+      if (data.summarized) {
+        onUpdate(element.id, { content: data.summarized } as Partial<TextElement>);
+      }
+    } catch (error) {
+      console.error('Summarize error:', error);
+      alert('要約に失敗しました');
+    } finally {
+      setIsSummarizing(false);
+    }
   };
 
   return (
@@ -88,8 +143,51 @@ export default function PropertyPanel({
                 </div>
               </div>
               <textarea value={element.content} onChange={(e) => onUpdate(element.id, { content: e.target.value } as Partial<TextElement>)} className="w-full px-3 py-2 border border-border rounded-lg text-sm resize-none" rows={4} placeholder="文字を入力" />
+              {/* 文字数カウンター */}
+              {textCapacity && (
+                <div className={`mt-2 p-2 rounded-lg text-xs ${textCapacity.isOverflow ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}>
+                  <div className="flex items-center justify-between">
+                    <span>
+                      {textCapacity.currentLength} / 約{textCapacity.chars}文字
+                      {textCapacity.isOverflow && (
+                        <span className="ml-1 font-medium">（{Math.abs(textCapacity.remaining)}文字オーバー）</span>
+                      )}
+                    </span>
+                    <span className="text-gray-400">
+                      {textCapacity.lines}行×{textCapacity.charsPerLine}文字
+                    </span>
+                  </div>
+                  {!textCapacity.isOverflow && textCapacity.remaining <= 10 && textCapacity.remaining > 0 && (
+                    <div className="mt-1 text-orange-500">残り{textCapacity.remaining}文字</div>
+                  )}
+                  {/* AI省略ボタン（文字数オーバー時のみ表示） */}
+                  {textCapacity.isOverflow && (
+                    <button
+                      onClick={handleSummarize}
+                      disabled={isSummarizing}
+                      className="mt-2 w-full py-1.5 px-3 bg-purple-500 text-white rounded-lg text-xs font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                    >
+                      {isSummarizing ? (
+                        <>
+                          <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>省略中...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          <span>AIで文章を省略</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-
 
             <div>
               <label className="text-xs font-medium text-gray-500 block mb-2">フォント</label>
