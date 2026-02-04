@@ -9,6 +9,8 @@ export async function POST(request: NextRequest) {
   try {
     const { text, maxChars } = await request.json();
 
+    console.log('[Summarize API] Request received:', { textLength: text?.length, maxChars });
+
     if (!text) {
       return NextResponse.json({ error: 'テキストが必要です' }, { status: 400 });
     }
@@ -20,14 +22,22 @@ export async function POST(request: NextRequest) {
     // OpenAI API キーを確認（フォールバック）
     const openaiKey = process.env.OPENAI_API_KEY;
 
+    console.log('[Summarize API] API keys available:', {
+      hasGemini: !!geminiKey,
+      hasOpenAI: !!openaiKey
+    });
+
     if (geminiKey) {
       // Gemini API を使用して要約
+      console.log('[Summarize API] Using Gemini');
       return await summarizeWithGemini(text, targetChars, geminiKey);
     } else if (openaiKey) {
       // OpenAI API を使用して要約
+      console.log('[Summarize API] Using OpenAI');
       return await summarizeWithOpenAI(text, targetChars, openaiKey);
     } else {
       // APIキーがない場合は簡易的な省略処理を行う
+      console.log('[Summarize API] No API key, using simple summarize');
       return NextResponse.json({
         summarized: simpleSummarize(text, targetChars),
         method: 'simple',
@@ -36,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Summarize API error:', error);
+    console.error('[Summarize API] Error:', error);
     return NextResponse.json(
       { error: '要約処理に失敗しました' },
       { status: 500 }
@@ -62,6 +72,8 @@ async function summarizeWithGemini(text: string, targetChars: number, apiKey: st
 
 ${text}`;
 
+  console.log('[Gemini] Sending request, targetChars:', targetChars);
+
   try {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
@@ -84,17 +96,22 @@ ${text}`;
       }
     );
 
+    console.log('[Gemini] Response status:', response.status);
+
     if (!response.ok) {
-      const error = await response.json();
-      console.error('Gemini API error:', error);
+      const errorText = await response.text();
+      console.error('[Gemini] API error response:', errorText);
       return NextResponse.json({
         summarized: simpleSummarize(text, targetChars),
         method: 'simple',
         message: 'Gemini API エラーのため、簡易省略を適用しました',
+        debug: { status: response.status, error: errorText }
       });
     }
 
     const data = await response.json();
+    console.log('[Gemini] Success, candidates:', data.candidates?.length);
+
     const summarized = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || simpleSummarize(text, targetChars);
 
     // 文字数が超えている場合は再度カット
@@ -110,7 +127,7 @@ ${text}`;
     });
 
   } catch (error) {
-    console.error('Gemini API error:', error);
+    console.error('[Gemini] Exception:', error);
     return NextResponse.json({
       summarized: simpleSummarize(text, targetChars),
       method: 'simple',

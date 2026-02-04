@@ -116,6 +116,7 @@ export function replaceElementPlaceholders(
  * AI要約APIを呼び出してテキストを省略
  */
 async function summarizeText(text: string, maxChars: number): Promise<string> {
+  console.log('[AI Summarize] Calling API with', { textLength: text.length, maxChars });
   try {
     const response = await fetch('/api/summarize', {
       method: 'POST',
@@ -124,14 +125,15 @@ async function summarizeText(text: string, maxChars: number): Promise<string> {
     });
 
     if (!response.ok) {
-      console.error('Summarize API error:', response.status);
+      console.error('[AI Summarize] API error:', response.status);
       return text.substring(0, maxChars - 1) + '…';
     }
 
     const data = await response.json();
+    console.log('[AI Summarize] Response:', { method: data.method, summarizedLength: data.summarizedLength });
     return data.summarized || text.substring(0, maxChars - 1) + '…';
   } catch (error) {
-    console.error('Summarize error:', error);
+    console.error('[AI Summarize] Error:', error);
     return text.substring(0, maxChars - 1) + '…';
   }
 }
@@ -169,8 +171,12 @@ export async function replaceElementPlaceholdersWithSummarize(
         textElement.style.writingMode === 'vertical'
       );
 
+      // 改行を除外して文字数をカウント（改行は文字数に含めない）
+      const contentWithoutNewlines = textElement.content.replace(/\r?\n/g, '');
+      const descriptionWithoutNewlines = product.description.replace(/\r?\n/g, '');
+
       // テキストが収まらない場合、AI省略を適用
-      if (textElement.content.length > capacity.chars) {
+      if (contentWithoutNewlines.length > capacity.chars) {
         // キャッシュキー: 商品ID + 最大文字数
         const cacheKey = `${product.productId || product.productCode}-${capacity.chars}`;
 
@@ -179,8 +185,8 @@ export async function replaceElementPlaceholdersWithSummarize(
           const cachedSummary = summaryCache.get(cacheKey)!;
           textElement.content = textElement.content.replace(product.description, cachedSummary);
         } else {
-          // AI省略を実行
-          const summarized = await summarizeText(product.description, capacity.chars);
+          // AI省略を実行（改行を削除したテキストを渡す）
+          const summarized = await summarizeText(descriptionWithoutNewlines, capacity.chars);
           summaryCache.set(cacheKey, summarized);
           textElement.content = textElement.content.replace(product.description, summarized);
         }
