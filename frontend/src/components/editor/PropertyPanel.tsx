@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { EditorElement, TextElement, ShapeElement, LineElement, BarcodeElement, QRCodeElement, TextStyle, BarcodeSettings, QRCodeSettings } from '@/types/editor';
-import { FONTS } from '@/lib/fonts';
 import PlaceholderMenu from './PlaceholderMenu';
+import FontSelector from './FontSelector';
 import type { RoundingMethod } from '@/lib/api';
 
 interface PropertyPanelProps {
@@ -12,14 +12,22 @@ interface PropertyPanelProps {
   onDelete: (id: string) => void;
   roundingMethod?: RoundingMethod;
   onRoundingChange?: (method: RoundingMethod) => void;
+  onBringToFront?: (id: string) => void;
+  onBringForward?: (id: string) => void;
+  onSendBackward?: (id: string) => void;
+  onSendToBack?: (id: string) => void;
 }
 
-export default function PropertyPanel({ 
-  element, 
-  onUpdate, 
+export default function PropertyPanel({
+  element,
+  onUpdate,
   onDelete,
   roundingMethod = 'floor',
   onRoundingChange,
+  onBringToFront,
+  onBringForward,
+  onSendBackward,
+  onSendToBack,
 }: PropertyPanelProps) {
   const [showPlaceholders, setShowPlaceholders] = useState(false);
   const [fontCategory, setFontCategory] = useState<'all' | 'japanese' | 'english'>('all');
@@ -49,10 +57,6 @@ export default function PropertyPanel({
     if (element.type !== 'text') return;
     onUpdate(element.id, { content: element.content + placeholder } as Partial<TextElement>);
   };
-
-  const filteredFonts = fontCategory === 'all' ? FONTS : FONTS.filter(f => f.category === fontCategory);
-
-
 
   return (
     <div className="h-full overflow-y-auto">
@@ -94,9 +98,11 @@ export default function PropertyPanel({
                   <button key={cat.key} onClick={() => setFontCategory(cat.key as 'all' | 'japanese' | 'english')} className={`px-2 py-1 text-xs rounded ${fontCategory === cat.key ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{cat.label}</button>
                 ))}
               </div>
-              <select value={element.style.fontFamily} onChange={(e) => handleTextStyleChange('fontFamily', e.target.value)} className="w-full px-3 py-2 border border-border rounded-lg text-sm" style={{ fontFamily: element.style.fontFamily }}>
-                {filteredFonts.map((font) => (<option key={font.value} value={font.value} style={{ fontFamily: font.value }}>{font.label}</option>))}
-              </select>
+              <FontSelector
+                value={element.style.fontFamily}
+                onChange={(fontFamily) => handleTextStyleChange('fontFamily', fontFamily)}
+                fontCategory={fontCategory}
+              />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-500 block mb-2">色</label>
@@ -184,7 +190,28 @@ export default function PropertyPanel({
 
         {element.type === 'shape' && (
           <>
-            <div><label className="text-xs font-medium text-gray-500 block mb-2">塗りつぶし色</label><input type="color" value={element.style.fill} onChange={(e) => onUpdate(element.id, { style: { ...element.style, fill: e.target.value } } as Partial<ShapeElement>)} className="w-full h-10 border border-border rounded cursor-pointer" /></div>
+            <div>
+              <label className="flex items-center gap-2 text-sm mb-2">
+                <input
+                  type="checkbox"
+                  checked={element.style.fillOpacity === 0}
+                  onChange={(e) => onUpdate(element.id, { style: { ...element.style, fillOpacity: e.target.checked ? 0 : 100 } } as Partial<ShapeElement>)}
+                  className="w-4 h-4"
+                />
+                <span>背景を透明にする</span>
+              </label>
+            </div>
+            <div className={element.style.fillOpacity === 0 ? 'opacity-50 pointer-events-none' : ''}>
+              <label className="text-xs font-medium text-gray-500 block mb-2">塗りつぶし色</label>
+              <input type="color" value={element.style.fill} onChange={(e) => onUpdate(element.id, { style: { ...element.style, fill: e.target.value } } as Partial<ShapeElement>)} className="w-full h-10 border border-border rounded cursor-pointer" />
+            </div>
+            <div className={element.style.fillOpacity === 0 ? 'opacity-50 pointer-events-none' : ''}>
+              <label className="text-xs font-medium text-gray-500 block mb-2">塗りつぶし不透明度</label>
+              <div className="flex items-center gap-3">
+                <input type="range" min="0" max="100" value={element.style.fillOpacity} onChange={(e) => onUpdate(element.id, { style: { ...element.style, fillOpacity: parseInt(e.target.value) } } as Partial<ShapeElement>)} className="flex-1" />
+                <span className="text-sm text-gray-600 w-10 text-right">{element.style.fillOpacity}%</span>
+              </div>
+            </div>
             <div><label className="text-xs font-medium text-gray-500 block mb-2">枠線色</label><input type="color" value={element.style.stroke} onChange={(e) => onUpdate(element.id, { style: { ...element.style, stroke: e.target.value } } as Partial<ShapeElement>)} className="w-full h-10 border border-border rounded cursor-pointer" /></div>
             <div><label className="text-xs font-medium text-gray-500 block mb-2">枠線の太さ</label><input type="number" min="0" max="20" value={element.style.strokeWidth} onChange={(e) => onUpdate(element.id, { style: { ...element.style, strokeWidth: parseFloat(e.target.value) || 0 } } as Partial<ShapeElement>)} className="w-full px-3 py-2 border border-border rounded-lg text-sm" /></div>
           </>
@@ -336,6 +363,55 @@ export default function PropertyPanel({
           <div className="grid grid-cols-2 gap-2">
             <div><label className="text-xs text-gray-400">幅</label><input type="number" step="0.1" value={element.size.width} onChange={(e) => handleSizeChange('width', e.target.value)} className="w-full px-2 py-1.5 border border-border rounded text-sm" /></div>
             <div><label className="text-xs text-gray-400">高さ</label><input type="number" step="0.1" value={element.size.height} onChange={(e) => handleSizeChange('height', e.target.value)} className="w-full px-2 py-1.5 border border-border rounded text-sm" /></div>
+          </div>
+        </div>
+
+        {/* レイヤー順序操作 */}
+        <div className="pt-4 border-t border-border">
+          <label className="text-xs font-medium text-gray-500 block mb-2">レイヤー順序</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => onBringToFront?.(element.id)}
+              className="flex items-center justify-center gap-1 px-2 py-1.5 border border-border rounded text-sm hover:bg-gray-50 transition-colors"
+              title="最前面へ"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 11l7-7 7 7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19l7-7 7 7" />
+              </svg>
+              <span>最前面</span>
+            </button>
+            <button
+              onClick={() => onSendToBack?.(element.id)}
+              className="flex items-center justify-center gap-1 px-2 py-1.5 border border-border rounded text-sm hover:bg-gray-50 transition-colors"
+              title="最背面へ"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 13l-7 7-7-7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 5l-7 7-7-7" />
+              </svg>
+              <span>最背面</span>
+            </button>
+            <button
+              onClick={() => onBringForward?.(element.id)}
+              className="flex items-center justify-center gap-1 px-2 py-1.5 border border-border rounded text-sm hover:bg-gray-50 transition-colors"
+              title="前面へ"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+              </svg>
+              <span>前面へ</span>
+            </button>
+            <button
+              onClick={() => onSendBackward?.(element.id)}
+              className="flex items-center justify-center gap-1 px-2 py-1.5 border border-border rounded text-sm hover:bg-gray-50 transition-colors"
+              title="背面へ"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+              <span>背面へ</span>
+            </button>
           </div>
         </div>
       </div>
