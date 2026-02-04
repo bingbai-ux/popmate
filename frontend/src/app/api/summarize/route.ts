@@ -58,6 +58,9 @@ export async function POST(request: NextRequest) {
  * Gemini API で要約
  */
 async function summarizeWithGemini(text: string, targetChars: number, apiKey: string) {
+  // 入力テキストから改行を削除
+  const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+
   const prompt = `あなたは商品説明文を簡潔に要約するアシスタントです。
 
 以下のルールに従ってください：
@@ -67,10 +70,11 @@ async function summarizeWithGemini(text: string, targetChars: number, apiKey: st
 - 「...」や「等」は使わず、完結した文章にしてください
 - 重要なキーワード（産地、特徴、効能など）を優先的に残してください
 - 要約した文章のみを出力してください（説明や前置きは不要）
+- 改行は絶対に入れないでください。1行で出力してください
 
 以下の商品説明文を${targetChars}文字以内に要約してください：
 
-${text}`;
+${cleanText}`;
 
   console.log('[Gemini] Sending request, targetChars:', targetChars);
 
@@ -112,7 +116,9 @@ ${text}`;
     const data = await response.json();
     console.log('[Gemini] Success, candidates:', data.candidates?.length);
 
-    const summarized = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || simpleSummarize(text, targetChars);
+    // 出力から改行を削除して1行に
+    const rawSummarized = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    const summarized = rawSummarized.replace(/\r?\n/g, '').trim() || simpleSummarize(cleanText, targetChars);
 
     // 文字数が超えている場合は再度カット
     const finalText = summarized.length > targetChars
@@ -210,12 +216,15 @@ async function summarizeWithOpenAI(text: string, targetChars: number, apiKey: st
  * 文の区切りを考慮して省略する
  */
 function simpleSummarize(text: string, maxChars: number): string {
-  if (text.length <= maxChars) {
-    return text;
+  // 改行を削除して1行に
+  const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+
+  if (cleanText.length <= maxChars) {
+    return cleanText;
   }
 
   // 句点、読点で区切って、収まる範囲で返す
-  const sentences = text.split(/([。、！？])/);
+  const sentences = cleanText.split(/([。、！？])/);
   let result = '';
 
   for (let i = 0; i < sentences.length; i++) {
@@ -229,7 +238,7 @@ function simpleSummarize(text: string, maxChars: number): string {
 
   // 何も収まらない場合は強制カット
   if (result.length === 0) {
-    return text.substring(0, maxChars - 1) + '…';
+    return cleanText.substring(0, maxChars - 1) + '…';
   }
 
   // 最後が句点でない場合は「…」を追加
