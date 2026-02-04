@@ -25,6 +25,7 @@ import {
   type PaperSize,
 } from '@/lib/printLayout';
 import { replaceElementPlaceholders } from '@/lib/placeholderUtils';
+import { applyKinsoku } from '@/lib/textUtils';
 
 function PrintContent() {
   const searchParams = useSearchParams();
@@ -219,6 +220,9 @@ function PrintContent() {
       const height = `${processedElement.size.height}mm`;
 
       if (processedElement.type === 'text') {
+        // 禁則処理を適用（数字+単位、カタカナ連続語の途切れ防止）
+        const processedContent = applyKinsoku(processedElement.content);
+
         return (
           <div
             key={processedElement.id}
@@ -239,11 +243,15 @@ function PrintContent() {
               overflow: 'hidden',
               whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
               writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+              // 禁則処理: 日本語の単語を途中で切らない
               wordBreak: 'keep-all',
-              overflowWrap: 'break-word',
+              // 単語が長すぎる場合のみ折り返し
+              overflowWrap: 'anywhere',
+              // ハイフネーション無効（日本語には不要）
+              hyphens: 'none',
             }}
           >
-            {processedElement.content}
+            {processedContent}
           </div>
         );
       }
