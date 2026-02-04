@@ -24,6 +24,12 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@popmate/shared": [
+        "../shared/types/index"
+      ],
+      "@popmate/shared/*": [
+        "../shared/types/*"
       ]
     },
     "target": "ES2017"

@@ -1,7 +1,9 @@
 // backend/src/services/smaregiService.ts
+// スマレジAPI連携サービス（レート制限対策強化版）
 
 import axios from 'axios';
 import type { SmaregiProduct, SmaregiCategory, SmaregiSupplier, PaginatedResponse } from '../types/index.js';
+import { smaregiRequestWithRateLimit, smaregiRequestQueue } from '../utils/rateLimiter.js';
 
 // ─── 環境変数 ───
 const CLIENT_ID = process.env.SMAREGI_CLIENT_ID!;
@@ -13,25 +15,23 @@ const CONTRACT_ID = process.env.SMAREGI_CONTRACT_ID!;
 const IDP_HOST = process.env.SMAREGI_IDP_HOST || 'https://id.smaregi.dev';
 const API_HOST = process.env.SMAREGI_API_HOST || 'https://api.smaregi.dev';
 
-// ─── トークンキャッシュ（これのみキャッシュ） ───
-let cachedToken: string | null = null;
-let tokenExpiresAt: number = 0;
+// ─── トークンキャッシュ（メモリ内） ───
+interface TokenCache {
+  token: string;
+  expiresAt: number;
+  scopes: string[];
+}
+
+let tokenCache: TokenCache | null = null;
 
 /**
  * Client Credentials Grant でアクセストークンを取得
  * トークンは有効期限内であればキャッシュを再利用する
- * 
- * 注意: スコープはスマレジ・デベロッパーズの管理画面で有効化されている必要がある
- * - pos.products:read → 商品・部門(カテゴリ)の参照（必須）
- * - pos.stores:read → 店舗の参照
- * - pos.suppliers:read → 仕入先の参照（有効化されていない場合は除外して再試行）
- * 
- * ※ pos.categories:read は存在しない。部門(カテゴリ)は pos.products:read に含まれる
  */
 async function getAccessToken(): Promise<string> {
   // キャッシュが有効ならそのまま返す（期限の5分前に更新）
-  if (cachedToken && Date.now() < tokenExpiresAt - 5 * 60 * 1000) {
-    return cachedToken;
+  if (tokenCache && Date.now() < tokenCache.expiresAt - 5 * 60 * 1000) {
+    return tokenCache.token;
   }
 
   const tokenUrl = `${IDP_HOST}/app/${CONTRACT_ID}/token`;
@@ -44,32 +44,40 @@ async function getAccessToken(): Promise<string> {
   const scopeBase = 'pos.products:read pos.stores:read';
 
   let response;
+  let usedScopes: string[];
+
   try {
-    response = await axios.post(
-      tokenUrl,
-      `grant_type=client_credentials&scope=${scopeWithSuppliers}`,
-      {
-        headers: {
-          'Authorization': `Basic ${credentials}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }
-    );
-    console.log('[SmaregiService] トークン取得成功（仕入先スコープ含む）');
-  } catch (firstError: any) {
-    // 仕入先スコープが無効な場合、基本スコープのみで再試行
-    console.warn('[SmaregiService] 仕入先スコープが無効、基本スコープで再試行:', firstError.response?.data?.error_description || firstError.message);
-    try {
-      response = await axios.post(
+    response = await smaregiRequestWithRateLimit(() =>
+      axios.post(
         tokenUrl,
-        `grant_type=client_credentials&scope=${scopeBase}`,
+        `grant_type=client_credentials&scope=${scopeWithSuppliers}`,
         {
           headers: {
             'Authorization': `Basic ${credentials}`,
             'Content-Type': 'application/x-www-form-urlencoded',
           },
         }
+      )
+    );
+    usedScopes = scopeWithSuppliers.split(' ');
+    console.log('[SmaregiService] トークン取得成功（仕入先スコープ含む）');
+  } catch (firstError: any) {
+    // 仕入先スコープが無効な場合、基本スコープのみで再試行
+    console.warn('[SmaregiService] 仕入先スコープが無効、基本スコープで再試行:', firstError.response?.data?.error_description || firstError.message);
+    try {
+      response = await smaregiRequestWithRateLimit(() =>
+        axios.post(
+          tokenUrl,
+          `grant_type=client_credentials&scope=${scopeBase}`,
+          {
+            headers: {
+              'Authorization': `Basic ${credentials}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+          }
+        )
       );
+      usedScopes = scopeBase.split(' ');
       console.log('[SmaregiService] トークン取得成功（基本スコープのみ）');
     } catch (secondError: any) {
       console.error('[SmaregiService] トークン取得失敗:', secondError.response?.data || secondError.message);
@@ -77,30 +85,41 @@ async function getAccessToken(): Promise<string> {
     }
   }
 
-  cachedToken = response.data.access_token;
-  tokenExpiresAt = Date.now() + response.data.expires_in * 1000;
+  // キャッシュを更新
+  tokenCache = {
+    token: response.data.access_token,
+    expiresAt: Date.now() + response.data.expires_in * 1000,
+    scopes: usedScopes,
+  };
 
   console.log('[SmaregiService] スコープ:', response.data.scope);
   console.log('[SmaregiService] 有効期限:', response.data.expires_in, '秒');
 
-  return cachedToken!;
+  return tokenCache.token;
 }
 
 /**
- * スマレジAPIにリクエストを送信する共通関数
+ * スマレジAPIにリクエストを送信する共通関数（レート制限対策付き）
  */
 async function smaregiRequest(path: string, params?: Record<string, string>): Promise<any> {
   const token = await getAccessToken();
   const url = `${API_HOST}/${CONTRACT_ID}/pos${path}`;
 
   console.log('[SmaregiService] API Request:', url, params);
-
-  const response = await axios.get(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-    params,
+  console.log('[SmaregiService] Queue状態:', {
+    active: smaregiRequestQueue.getActiveRequests(),
+    queued: smaregiRequestQueue.getQueueLength(),
   });
+
+  const response = await smaregiRequestWithRateLimit(() =>
+    axios.get(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      params,
+      timeout: 30000, // 30秒タイムアウト
+    })
+  );
 
   return response;
 }
@@ -108,6 +127,8 @@ async function smaregiRequest(path: string, params?: Record<string, string>): Pr
 /**
  * 全ページを自動取得するヘルパー関数
  * x-total-countヘッダーを確認し、1000件ずつ全ページを取得
+ *
+ * メモリ対策: ジェネレータ版も用意（fetchAllPagesGenerator）
  */
 async function fetchAllPages<T>(
   path: string,
@@ -117,7 +138,7 @@ async function fetchAllPages<T>(
   const limit = 1000;
   let page = 1;
   let allItems: T[] = [];
-  let totalCount = -1; // -1 = 未取得
+  let totalCount = -1;
 
   while (true) {
     const params = { ...baseParams, limit: String(limit), page: String(page) };
@@ -127,6 +148,11 @@ async function fetchAllPages<T>(
     if (page === 1) {
       totalCount = parseInt(response.headers['x-total-count'] || '0', 10);
       console.log(`[SmaregiService] ${path} 総件数: ${totalCount}`);
+
+      // 大量データの警告
+      if (totalCount > 10000) {
+        console.warn(`[SmaregiService] ⚠️ 大量データ警告: ${totalCount}件の取得が必要です`);
+      }
     }
 
     const items = Array.isArray(data) ? data.map(transform) : [];
@@ -135,10 +161,10 @@ async function fetchAllPages<T>(
     console.log(`[SmaregiService] ${path} ページ${page}: ${items.length}件取得 (累計: ${allItems.length}/${totalCount})`);
 
     // 終了判定
-    if (items.length === 0) break;                    // データなし
-    if (items.length < limit) break;                  // 最終ページ（limit未満）
-    if (totalCount > 0 && allItems.length >= totalCount) break; // 全件取得完了
-    if (page >= 100) {                                // 安全弁（10万件超）
+    if (items.length === 0) break;
+    if (items.length < limit) break;
+    if (totalCount > 0 && allItems.length >= totalCount) break;
+    if (page >= 100) {
       console.warn(`[SmaregiService] ${path}: 100ページ超過のため打ち切り`);
       break;
     }
@@ -150,11 +176,52 @@ async function fetchAllPages<T>(
 }
 
 /**
- * カテゴリ一覧を取得（キャッシュなし、毎回最新を取得）
- * categoryId順でソート
+ * ページネーション対応の商品取得（ストリーミング対応版）
+ * メモリ効率を重視して1ページずつ処理
+ */
+export async function* fetchProductsGenerator(
+  baseParams: Record<string, string> = {},
+  transform: (item: any) => SmaregiProduct
+): AsyncGenerator<SmaregiProduct[], void, unknown> {
+  const limit = 1000;
+  let page = 1;
+  let totalCount = -1;
+  let fetchedCount = 0;
+
+  while (true) {
+    const params = { ...baseParams, limit: String(limit), page: String(page) };
+    const response = await smaregiRequest('/products/', params);
+    const data = response.data;
+
+    if (page === 1) {
+      totalCount = parseInt(response.headers['x-total-count'] || '0', 10);
+      console.log(`[SmaregiService] 商品ストリーミング開始: 総件数 ${totalCount}`);
+    }
+
+    const items = Array.isArray(data) ? data.map(transform) : [];
+    fetchedCount += items.length;
+
+    console.log(`[SmaregiService] ページ${page}: ${items.length}件 (累計: ${fetchedCount}/${totalCount})`);
+
+    if (items.length > 0) {
+      yield items; // 1ページ分をyield
+    }
+
+    // 終了判定
+    if (items.length === 0) break;
+    if (items.length < limit) break;
+    if (totalCount > 0 && fetchedCount >= totalCount) break;
+    if (page >= 100) break;
+
+    page++;
+  }
+}
+
+/**
+ * カテゴリ一覧を取得
  */
 export async function getCategories(): Promise<SmaregiCategory[]> {
-  console.log('[SmaregiService] カテゴリ一覧を取得中（キャッシュなし）...');
+  console.log('[SmaregiService] カテゴリ一覧を取得中...');
 
   const categories = await fetchAllPages<SmaregiCategory>(
     '/categories/',
@@ -168,7 +235,6 @@ export async function getCategories(): Promise<SmaregiCategory[]> {
     })
   );
 
-  // categoryIdの数値順でソート（APIのsortが効かない場合の保険）
   categories.sort((a, b) => Number(a.categoryId) - Number(b.categoryId));
 
   console.log('[SmaregiService] カテゴリ取得完了:', categories.length, '件');
@@ -176,7 +242,7 @@ export async function getCategories(): Promise<SmaregiCategory[]> {
 }
 
 /**
- * カテゴリIDをキーにしたMapを作成（毎回最新を取得）
+ * カテゴリIDをキーにしたMapを作成
  */
 async function getCategoryMap(): Promise<Map<string, string>> {
   const categories = await getCategories();
@@ -188,8 +254,7 @@ async function getCategoryMap(): Promise<Map<string, string>> {
 }
 
 /**
- * 仕入先一覧を取得（スマレジ仕入先マスタAPIから）
- * pos.suppliers:readスコープが無効な場合は空配列を返す
+ * 仕入先一覧を取得
  */
 export async function getSuppliers(): Promise<SmaregiSupplier[]> {
   console.log('[SmaregiService] 仕入先一覧を取得中...');
@@ -208,14 +273,13 @@ export async function getSuppliers(): Promise<SmaregiSupplier[]> {
     console.log('[SmaregiService] 仕入先取得完了:', suppliers.length, '件');
     return suppliers;
   } catch (error: any) {
-    // pos.suppliers:readスコープが無効な場合、403エラーになるので空配列を返す
     console.warn('[SmaregiService] 仕入先取得失敗（スコープ未有効の可能性）:', error.response?.status, error.response?.data?.message || error.message);
     return [];
   }
 }
 
 /**
- * 商品一覧を取得（ページネーション対応、カテゴリ名結合）
+ * 商品一覧を取得（ページネーション対応）
  */
 export async function getProducts(
   page: number = 1,
@@ -237,7 +301,6 @@ export async function getProducts(
     queryParams['category_id'] = params.categoryId;
   }
 
-  // 商品とカテゴリマップを並行取得
   const [response, categoryMap] = await Promise.all([
     smaregiRequest('/products/', queryParams),
     getCategoryMap(),
@@ -245,7 +308,6 @@ export async function getProducts(
 
   const data = response.data;
 
-  // スマレジAPIのレスポンスを変換（カテゴリ名と税情報を追加）
   const products: SmaregiProduct[] = (Array.isArray(data) ? data : []).map((item: any) => ({
     productId: String(item.productId),
     productCode: item.productCode || '',
@@ -253,19 +315,16 @@ export async function getProducts(
     price: Number(item.price) || 0,
     taxRate: item.taxRate ? Number(item.taxRate) : undefined,
     categoryId: item.categoryId ? String(item.categoryId) : undefined,
-    // カテゴリ名を結合
     categoryName: categoryMap.get(String(item.categoryId)) || item.categoryName || '',
     groupCode: item.groupCode || undefined,
     tag: item.tag || undefined,
     supplierProductNo: item.supplierProductNo || undefined,
     description: item.description || undefined,
-    // 税関連フィールドをパススルー
     taxDivision: item.taxDivision || '1',
     reduceTaxId: item.reduceTaxId || null,
     useCategoryReduceTax: item.useCategoryReduceTax || '0',
   }));
 
-  // ページネーション情報を取得（ヘッダーから）
   const totalCount = parseInt(response.headers['x-total-count'] || '0', 10);
   const totalPages = Math.ceil(totalCount / limit) || 1;
 
@@ -287,7 +346,6 @@ export async function getProducts(
 export async function getAllProducts(): Promise<SmaregiProduct[]> {
   console.log('[SmaregiService] 全商品を取得中（自動ページネーション）...');
 
-  // カテゴリマップを先に取得
   const categoryMap = await getCategoryMap();
 
   const products = await fetchAllPages<SmaregiProduct>(
@@ -317,17 +375,21 @@ export async function getAllProducts(): Promise<SmaregiProduct[]> {
 
 /**
  * 商品フィルタ用のメーカー(tag)一覧・仕入先(groupCode)一覧を取得
- * 全商品を走査して一意な値を抽出する
- * 5分間キャッシュ（フィルタ選択肢は頻繁に変わらないため）
+ * 5分間キャッシュ
  */
-let filtersCache: { makers: string[]; suppliers: string[] } | null = null;
-let filtersCacheExpiresAt: number = 0;
+interface FiltersCache {
+  makers: string[];
+  suppliers: string[];
+  expiresAt: number;
+}
+
+let filtersCache: FiltersCache | null = null;
 
 export async function getProductFilters(): Promise<{ makers: string[]; suppliers: string[] }> {
   // キャッシュが有効ならそのまま返す
-  if (filtersCache && Date.now() < filtersCacheExpiresAt) {
+  if (filtersCache && Date.now() < filtersCache.expiresAt) {
     console.log('[SmaregiService] フィルタキャッシュ使用');
-    return filtersCache;
+    return { makers: filtersCache.makers, suppliers: filtersCache.suppliers };
   }
 
   console.log('[SmaregiService] フィルタ一覧を取得中（全商品走査）...');
@@ -335,7 +397,6 @@ export async function getProductFilters(): Promise<{ makers: string[]; suppliers
   const makersSet = new Set<string>();
   const suppliersSet = new Set<string>();
 
-  // 全商品を走査して tag / groupCode を収集
   await fetchAllPages<void>(
     '/products/',
     {},
@@ -348,19 +409,18 @@ export async function getProductFilters(): Promise<{ makers: string[]; suppliers
   const makers = [...makersSet].sort((a, b) => a.localeCompare(b, 'ja'));
   const suppliers = [...suppliersSet].sort((a, b) => a.localeCompare(b, 'ja'));
 
-  filtersCache = { makers, suppliers };
-  filtersCacheExpiresAt = Date.now() + 5 * 60 * 1000; // 5分キャッシュ
+  filtersCache = {
+    makers,
+    suppliers,
+    expiresAt: Date.now() + 5 * 60 * 1000, // 5分キャッシュ
+  };
 
   console.log(`[SmaregiService] フィルタ取得完了: メーカー${makers.length}件, 仕入先${suppliers.length}件`);
-  return filtersCache;
+  return { makers, suppliers };
 }
 
 /**
- * 条件付き商品検索（検索ファースト用）
- * - categoryIds: カテゴリIDで絞り込み（スマレジAPI直接）
- * - tags: メーカー（タグ値）で絞り込み（複数選択可、サーバーサイドフィルタ）
- * - groupCodes: 仕入先（グループコード値）で絞り込み（複数選択可、サーバーサイドフィルタ）
- * - keyword: 商品名/コード/説明でキーワード絞り込み
+ * 条件付き商品検索
  */
 export async function searchProducts(params: {
   keyword?: string;
@@ -477,7 +537,7 @@ export async function getProductById(productId: string): Promise<SmaregiProduct 
 }
 
 /**
- * 接続テスト（トークン取得が成功するか確認）
+ * 接続テスト
  */
 export async function testConnection(): Promise<{ success: boolean; message: string }> {
   try {
@@ -490,4 +550,34 @@ export async function testConnection(): Promise<{ success: boolean; message: str
       message: `接続失敗: ${error.response?.data?.error_description || error.message}`,
     };
   }
+}
+
+/**
+ * キャッシュをクリア（管理用）
+ */
+export function clearCache(): void {
+  tokenCache = null;
+  filtersCache = null;
+  console.log('[SmaregiService] キャッシュをクリアしました');
+}
+
+/**
+ * API状態を取得（管理用）
+ */
+export function getApiStatus(): {
+  tokenCached: boolean;
+  tokenExpiresIn: number | null;
+  filtersCached: boolean;
+  filtersExpiresIn: number | null;
+  queueActive: number;
+  queuePending: number;
+} {
+  return {
+    tokenCached: !!tokenCache,
+    tokenExpiresIn: tokenCache ? Math.max(0, Math.floor((tokenCache.expiresAt - Date.now()) / 1000)) : null,
+    filtersCached: !!filtersCache,
+    filtersExpiresIn: filtersCache ? Math.max(0, Math.floor((filtersCache.expiresAt - Date.now()) / 1000)) : null,
+    queueActive: smaregiRequestQueue.getActiveRequests(),
+    queuePending: smaregiRequestQueue.getQueueLength(),
+  };
 }
