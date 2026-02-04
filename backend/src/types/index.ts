@@ -1,91 +1,224 @@
-// バックエンド型定義
-// 共有型定義からの再エクスポート + バックエンド固有の型
+// ===== User Types =====
+export interface PopmateUser {
+  id: string;
+  email: string;
+  smaregi_contract_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
-// ============================================
-// 共有型定義（@popmate/shared から）
-// ============================================
-// Note: ビルド時にパス解決されるため、直接インポートパスを使用
-export type {
-  // Position & Size
-  Position,
-  Size,
+// ===== Template Types =====
+export type TemplateType = 'price_pop' | 'a4' | 'a5' | 'a6' | 'custom';
 
-  // User Types
-  PopmateUser,
+export interface PopmateTemplate {
+  id: string;
+  user_id: string | null;
+  name: string;
+  type: TemplateType;
+  width_mm: number;
+  height_mm: number;
+  design_data: DesignData;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
-  // Template Types
-  TemplateType,
-  PopmateTemplate,
-  TemplateConfig,
+// ===== Design Data Types =====
+export interface DesignData {
+  background: BackgroundSettings;
+  elements: DesignElement[];
+}
 
-  // Design Data Types
-  DesignData,
-  BackgroundSettings,
-  DesignElement,
-  ElementProperties,
+export interface BackgroundSettings {
+  color: string;
+  image_url?: string;
+}
 
-  // Product Types
-  SmaregiProduct,
-  SmaregiCategory,
-  SmaregiSupplier,
-  Product,
-  Category,
-  Supplier,
+export interface DesignElement {
+  id: string;
+  type: 'text' | 'image' | 'shape' | 'table';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+  properties: ElementProperties;
+}
 
-  // Saved Pop Types
-  PopmateSavedPop,
-  SelectedProduct,
-  PrintSettings,
+export interface ElementProperties {
+  // Text properties
+  content?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  fontStyle?: string;
+  color?: string;
+  textAlign?: 'left' | 'center' | 'right';
+  lineHeight?: number;
 
-  // Tax Settings
-  TaxSettings,
-  RoundingMethod,
+  // Image properties
+  src?: string;
+  objectFit?: 'contain' | 'cover' | 'fill';
 
-  // Project Types
-  SaveType,
-  SavedProject,
+  // Shape properties
+  shapeType?: 'rectangle' | 'circle' | 'line';
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  transparent?: boolean;
 
-  // API Response Types
-  ApiResponse,
-  PaginatedResponse,
-  PaginationInfo,
+  // Table properties
+  rows?: number;
+  cols?: number;
+  cellData?: string[][];
+  borderColor?: string;
+  borderWidth?: number;
+}
 
-  // Request Types
-  CreateTemplateRequest,
-  UpdateTemplateRequest,
-  SavePopRequest,
-  ProductSearchParams,
+// ===== Saved Pop Types =====
+export interface PopmateSavedPop {
+  id: string;
+  user_id: string;
+  name: string;
+  template_id: string | null;
+  width_mm: number;
+  height_mm: number;
+  design_data: DesignData;
+  selected_products: SelectedProduct[];
+  print_settings: PrintSettings;
+  created_at: string;
+  updated_at: string;
+}
 
-  // Webhook Types
-  WebhookEventType,
-  WebhookPayload,
+export interface SelectedProduct {
+  product_id: string;
+  product_code: string;
+  product_name: string;
+  price: number;
+  tax_rate?: number;
+  category_name?: string;
+  image_url?: string;
+}
 
-  // Placeholder Types
-  PlaceholderDefinition,
-} from '../../../shared/types/index.js';
+export interface PrintSettings {
+  paper_size: 'A4' | 'A3';
+  orientation: 'portrait' | 'landscape';
+  border_enabled: boolean;
+  border_color: string;
+  border_width: number;
+  margin_mm: number;
+}
 
-export {
-  DEFAULT_TAX_SETTINGS,
-  TEMPLATES,
-  PLACEHOLDERS,
-} from '../../../shared/types/index.js';
+// ===== Smaregi API Types =====
+export interface SmaregiProduct {
+  productId: string;
+  productCode: string;
+  productName: string;
+  price: number;
+  taxRate?: number;
+  categoryId?: string;
+  categoryName?: string;
+  groupCode?: string;
+  tag?: string;
+  supplierProductNo?: string;
+  description?: string;
+  taxDivision?: string;
+  reduceTaxId?: string | null;
+  useCategoryReduceTax?: string;
+}
 
-// ============================================
-// バックエンド固有の型定義
-// ============================================
+export interface SmaregiCategory {
+  categoryId: string;
+  categoryCode: string;
+  categoryName: string;
+  level: number;
+  parentCategoryId?: string;
+}
 
-/**
- * Smaregi APIトークン情報
- */
+export interface SmaregiSupplier {
+  supplierId: string;
+  supplierCode: string;
+  supplierName: string;
+}
+
+// ===== API Response Types =====
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+export interface PaginatedResponse<T> {
+  success: boolean;
+  data: T[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+// ===== Request Types =====
+export interface CreateTemplateRequest {
+  name: string;
+  type: TemplateType;
+  width_mm: number;
+  height_mm: number;
+  design_data: DesignData;
+}
+
+export interface UpdateTemplateRequest {
+  name?: string;
+  width_mm?: number;
+  height_mm?: number;
+  design_data?: DesignData;
+}
+
+export interface SavePopRequest {
+  name: string;
+  template_id?: string;
+  width_mm: number;
+  height_mm: number;
+  design_data: DesignData;
+  selected_products: SelectedProduct[];
+  print_settings: PrintSettings;
+}
+
+export interface ProductSearchParams {
+  keyword?: string;
+  category_id?: string;
+  page?: number;
+  limit?: number;
+}
+
+// ===== Webhook Types =====
+export type WebhookEventType =
+  | 'product.created'
+  | 'product.updated'
+  | 'product.deleted'
+  | 'category.created'
+  | 'category.updated'
+  | 'category.deleted';
+
+export interface WebhookPayload {
+  event: WebhookEventType;
+  timestamp: string;
+  data: {
+    id: string;
+    [key: string]: unknown;
+  };
+}
+
+// ===== Backend-specific Types =====
+
 export interface SmaregiTokenInfo {
   accessToken: string;
   expiresAt: number;
   contractId: string;
 }
 
-/**
- * Smaregi API設定
- */
 export interface SmaregiApiConfig {
   clientId: string;
   clientSecret: string;
@@ -93,53 +226,35 @@ export interface SmaregiApiConfig {
   scopes: string[];
 }
 
-/**
- * キャッシュエントリ
- */
 export interface CacheEntry<T> {
   data: T;
   timestamp: number;
   ttl: number;
 }
 
-/**
- * API レート制限ステータス
- */
 export interface RateLimitStatus {
   remaining: number;
   limit: number;
   resetTime: number;
 }
 
-/**
- * バッチ処理リクエスト
- */
 export interface BatchRequest<T> {
   items: T[];
   batchSize: number;
   delayMs: number;
 }
 
-/**
- * バッチ処理結果
- */
 export interface BatchResult<T, R> {
   successful: Array<{ item: T; result: R }>;
   failed: Array<{ item: T; error: Error }>;
 }
 
-/**
- * ページング情報（Smaregi API）
- */
 export interface SmaregiPagination {
   limit: number;
   page: number;
   hasMore: boolean;
 }
 
-/**
- * Supabase ユーザーセッション
- */
 export interface UserSession {
   userId: string;
   contractId: string | null;

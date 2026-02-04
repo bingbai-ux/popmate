@@ -16,9 +16,7 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@popmate/shared": ["../shared/types/index"],
-      "@popmate/shared/*": ["../shared/types/*"]
+      "@/*": ["src/*"]
     }
   },
   "include": ["src/**/*"],
