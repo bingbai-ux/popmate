@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ポップメイト 取り扱い説明書</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      line-height: 1.8;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      color: #333;
+      font-size: 14px;
+    }
+
+    h1 {
+      color: #0066CC;
+      border-bottom: 3px solid #0066CC;
+      padding-bottom: 10px;
+      font-size: 28px;
+      margin-top: 0;
+    }
+
+    h2 {
+      color: #0066CC;
+      border-left: 4px solid #0066CC;
+      padding-left: 12px;
+      margin-top: 40px;
+      font-size: 20px;
+    }
+
+    h3 {
+      color: #333;
+      margin-top: 30px;
+      font-size: 16px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 20px 0;
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px 12px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #0066CC;
+      color: white;
+      font-weight: bold;
+    }
+
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+
+    code {
+      background-color: #f4f4f4;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      color: #d63384;
+    }
+
+    pre {
+      background-color: #f4f4f4;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+
+    pre code {
+      background-color: transparent;
+      padding: 0;
+      color: #333;
+    }
+
+    blockquote {
+      border-left: 4px solid #00CC66;
+      margin: 20px 0;
+      padding: 10px 20px;
+      background-color: #f0fff4;
+      color: #2d7a4d;
+    }
+
+    blockquote strong {
+      color: #00CC66;
+    }
+
+    hr {
+      border: none;
+      border-top: 2px solid #eee;
+      margin: 30px 0;
+    }
+
+    a {
+      color: #0066CC;
+      text-decoration: none;
+    }
+
+    ul, ol {
+      padding-left: 25px;
+    }
+
+    li {
+      margin: 5px 0;
+    }
+
+    @media print {
+      body {
+        padding: 20px;
+      }
+
+      h2 {
+        page-break-before: auto;
+      }
+
+      table, pre, blockquote {
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+<h1>ポップメイト 取り扱い説明書</h1>
+<p>スマレジから商品情報を取得し、プライスポップを簡単に作成できるツールです。</p>
+<hr>
+<h2>目次</h2>
+<ol>
+<li><a href="#%E5%9F%BA%E6%9C%AC%E7%9A%84%E3%81%AA%E6%B5%81%E3%82%8C">基本的な流れ</a></li>
+<li><a href="#step-1-%E3%82%B9%E3%82%BF%E3%83%BC%E3%83%88%E7%94%BB%E9%9D%A2">Step 1: スタート画面</a></li>
+<li><a href="#step-2-%E3%83%86%E3%83%B3%E3%83%97%E3%83%AC%E3%83%BC%E3%83%88%E3%82%92%E9%81%B8%E3%81%B6">Step 2: テンプレートを選ぶ</a></li>
+<li><a href="#step-3-%E3%83%87%E3%82%B6%E3%82%A4%E3%83%B3%E3%82%92%E7%B7%A8%E9%9B%86%E3%81%99%E3%82%8B">Step 3: デザインを編集する</a></li>
+<li><a href="#step-4-%E5%95%86%E5%93%81%E3%82%92%E9%81%B8%E3%81%B6">Step 4: 商品を選ぶ</a></li>
+<li><a href="#step-5-%E5%95%86%E5%93%81%E6%83%85%E5%A0%B1%E3%82%92%E7%A2%BA%E8%AA%8D%E7%B7%A8%E9%9B%86%E3%81%99%E3%82%8B">Step 5: 商品情報を確認・編集する</a></li>
+<li><a href="#step-6-%E5%8D%B0%E5%88%B7pdf%E5%87%BA%E5%8A%9B">Step 6: 印刷・PDF出力</a></li>
+<li><a href="#%E4%BF%9D%E5%AD%98%E3%81%A8%E8%AA%AD%E3%81%BF%E8%BE%BC%E3%81%BF">保存と読み込み</a></li>
+<li><a href="#%E4%BE%BF%E5%88%A9%E3%81%AA%E3%82%B7%E3%83%A7%E3%83%BC%E3%83%88%E3%82%AB%E3%83%83%E3%83%88%E3%82%AD%E3%83%BC">便利なショートカットキー</a></li>
+<li><a href="#%E3%82%88%E3%81%8F%E3%81%82%E3%82%8B%E8%B3%AA%E5%95%8Fqa">よくある質問（Q&amp;A）</a></li>
+</ol>
+<hr>
+<h2>基本的な流れ</h2>
+<pre><code>┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  テンプレート │ → │  デザイン   │ → │  商品選択   │ → │  情報編集   │ → │  印刷/PDF   │
+│    選択     │    │    編集     │    │             │    │             │    │    出力     │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+</code></pre>
+<p><strong>5つのステップで簡単にポップが作れます！</strong></p>
+<hr>
+<h2>Step 1: スタート画面</h2>
+<p>アプリを開くと最初に表示される画面です。</p>
+<h3>選べる3つの選択肢</h3>
+<table>
+<thead>
+<tr>
+<th>ボタン</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>テンプレートから選ぶ</strong></td>
+<td>用意されたテンプレートを使ってポップを作成</td>
+</tr>
+<tr>
+<td><strong>保存データから選ぶ</strong></td>
+<td>以前保存したプロジェクトを開いて続きから作業</td>
+</tr>
+<tr>
+<td><strong>新規テンプレートを作成</strong></td>
+<td>自分でサイズを決めてオリジナルテンプレートを作成</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>ヒント</strong>: 初めての方は「テンプレートから選ぶ」がおすすめです</p>
+</blockquote>
+<hr>
+<h2>Step 2: テンプレートを選ぶ</h2>
+<h3>システムテンプレート（最初から用意されているもの）</h3>
+<table>
+<thead>
+<tr>
+<th>テンプレート名</th>
+<th>サイズ</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>プライスポップ</strong></td>
+<td>91×55mm</td>
+<td>小さい価格札。一番よく使います</td>
+</tr>
+<tr>
+<td><strong>A4</strong></td>
+<td>210×297mm</td>
+<td>大きなポップや説明POP</td>
+</tr>
+<tr>
+<td><strong>A5</strong></td>
+<td>148×210mm</td>
+<td>中サイズのポップ</td>
+</tr>
+<tr>
+<td><strong>A6</strong></td>
+<td>105×148mm</td>
+<td>小サイズのポップ</td>
+</tr>
+</tbody></table>
+<h3>カスタムテンプレート</h3>
+<p>自分で作成したテンプレートがここに表示されます。</p>
+<h3>テンプレートの操作</h3>
+<ul>
+<li><strong>クリック</strong> → そのテンプレートでデザイン編集へ進む</li>
+<li><strong>複製ボタン</strong> → テンプレートをコピーして新しく作成</li>
+<li><strong>削除ボタン</strong> → カスタムテンプレートを削除（確認あり）</li>
+</ul>
+<hr>
+<h2>Step 3: デザインを編集する</h2>
+<p>ポップのデザインを作成する画面です。</p>
+<h3>画面の構成</h3>
+<pre><code>┌──────────────────────────────────────────────────────┐
+│  ツールバー（要素追加ボタン、ズームなど）               │
+├────────────────────────────────┬─────────────────────┤
+│                                │                     │
+│      キャンバス               │   プロパティ         │
+│    （デザイン作成エリア）       │    パネル           │
+│                                │  （選択した要素の    │
+│                                │   設定を変更）       │
+│                                │                     │
+└────────────────────────────────┴─────────────────────┘
+</code></pre>
+<h3>追加できる要素</h3>
+<table>
+<thead>
+<tr>
+<th>要素</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>テキスト</strong></td>
+<td>文字を追加。商品名や価格を表示するのに使います</td>
+</tr>
+<tr>
+<td><strong>画像</strong></td>
+<td>画像ファイルをアップロードして配置</td>
+</tr>
+<tr>
+<td><strong>図形</strong></td>
+<td>四角形、角丸四角形、円など</td>
+</tr>
+<tr>
+<td><strong>線</strong></td>
+<td>直線や矢印付きの線</td>
+</tr>
+<tr>
+<td><strong>バーコード</strong></td>
+<td>商品コードからバーコードを自動生成</td>
+</tr>
+<tr>
+<td><strong>QRコード</strong></td>
+<td>URLなどからQRコードを自動生成</td>
+</tr>
+</tbody></table>
+<h3>プレースホルダー（自動で商品情報に置き換わる文字）</h3>
+<p>テキスト要素に以下の文字を入力すると、印刷時に自動で商品情報に置き換わります：</p>
+<table>
+<thead>
+<tr>
+<th>プレースホルダー</th>
+<th>表示される内容</th>
+<th>例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>{{productName}}</code></td>
+<td>商品名</td>
+<td>りんご</td>
+</tr>
+<tr>
+<td><code>{{price}}</code></td>
+<td>税抜価格</td>
+<td>¥100</td>
+</tr>
+<tr>
+<td><code>{{taxIncludedPrice}}</code></td>
+<td>税込価格（自動計算）</td>
+<td>¥110</td>
+</tr>
+<tr>
+<td><code>{{description}}</code></td>
+<td>商品説明</td>
+<td>青森県産の甘いりんご</td>
+</tr>
+<tr>
+<td><code>{{maker}}</code></td>
+<td>メーカー名</td>
+<td>○○農園</td>
+</tr>
+<tr>
+<td><code>{{category}}</code></td>
+<td>カテゴリ名</td>
+<td>果物</td>
+</tr>
+<tr>
+<td><code>{{productCode}}</code></td>
+<td>商品コード</td>
+<td>4901234567890</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>重要</strong>: プレースホルダーは <code>{{</code> と <code>}}</code> で囲んでください</p>
+</blockquote>
+<h3>要素の編集方法</h3>
+<ol>
+<li><strong>選択</strong>: キャンバス上の要素をクリック</li>
+<li><strong>移動</strong>: ドラッグするか、矢印キーで細かく移動</li>
+<li><strong>サイズ変更</strong>: プロパティパネルで数値を入力</li>
+<li><strong>削除</strong>: 選択して <code>Delete</code> キーまたは <code>Backspace</code> キー</li>
+</ol>
+<h3>プロパティパネルで変更できること</h3>
+<p><strong>テキストの場合:</strong></p>
+<ul>
+<li>フォント（20種類以上の日本語フォント）</li>
+<li>文字サイズ</li>
+<li>太字・斜体</li>
+<li>文字色</li>
+<li>配置（左揃え/中央/右揃え）</li>
+<li>行間・字間</li>
+<li>縦書き/横書き</li>
+</ul>
+<p><strong>図形の場合:</strong></p>
+<ul>
+<li>塗りつぶし色</li>
+<li>枠線の色・太さ</li>
+<li>角の丸み</li>
+</ul>
+<hr>
+<h2>Step 4: 商品を選ぶ</h2>
+<p>スマレジから商品データを取得して、ポップに使う商品を選びます。</p>
+<h3>画面の構成</h3>
+<pre><code>┌──────────────────────────────────────────────────────┐
+│  検索フィルター（キーワード、カテゴリ、メーカーなど）    │
+├────────────────────────────────┬─────────────────────┤
+│                                │                     │
+│      商品一覧テーブル          │   選択済み商品      │
+│    （チェックボックスで選択）   │    サイドバー       │
+│                                │                     │
+│                                │                     │
+└────────────────────────────────┴─────────────────────┘
+</code></pre>
+<h3>商品の検索方法</h3>
+<table>
+<thead>
+<tr>
+<th>フィルター</th>
+<th>使い方</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>キーワード検索</strong></td>
+<td>商品名で検索</td>
+</tr>
+<tr>
+<td><strong>カテゴリ</strong></td>
+<td>ドロップダウンから選択（複数可）</td>
+</tr>
+<tr>
+<td><strong>メーカー</strong></td>
+<td>タグから選択（複数可）</td>
+</tr>
+<tr>
+<td><strong>仕入先</strong></td>
+<td>グループから選択（複数可）</td>
+</tr>
+</tbody></table>
+<h3>商品の選択方法</h3>
+<ol>
+<li>商品一覧から選びたい商品の <strong>チェックボックス</strong> にチェック</li>
+<li>チェックした商品は右側の「選択済み商品」に追加される</li>
+<li><strong>「すべて選択」</strong> ボタンで表示中の全商品を選択できる</li>
+</ol>
+<h3>選択を解除する</h3>
+<ul>
+<li>右側サイドバーの商品横の <strong>×ボタン</strong> で個別に解除</li>
+<li><strong>「すべてクリア」</strong> で一括解除</li>
+</ul>
+<hr>
+<h2>Step 5: 商品情報を確認・編集する</h2>
+<p>選んだ商品がデザインに当てはめられた状態をプレビューできます。</p>
+<h3>画面の構成</h3>
+<pre><code>┌──────────────────────────────────────────────────────┐
+│                                                      │
+│      プレビューキャンバス                             │
+│    （実際の印刷イメージを確認）                       │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│      商品データテーブル                               │
+│    （商品情報を直接編集可能）                         │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+</code></pre>
+<h3>操作方法</h3>
+<ol>
+<li><strong>商品の切り替え</strong>: テーブルの行をクリックすると、その商品のプレビューが表示される</li>
+<li><strong>情報の編集</strong>: テーブル内の文字を直接クリックして編集可能</li>
+<li><strong>リアルタイム反映</strong>: 編集するとすぐにプレビューに反映される</li>
+</ol>
+<h3>税込価格の計算</h3>
+<p>税込価格は自動計算されます。端数処理の方法を選べます：</p>
+<table>
+<thead>
+<tr>
+<th>設定</th>
+<th>説明</th>
+<th>例（税抜100円、税率10%）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>切り捨て</strong></td>
+<td>小数点以下を切り捨て</td>
+<td>¥110</td>
+</tr>
+<tr>
+<td><strong>四捨五入</strong></td>
+<td>小数点以下を四捨五入</td>
+<td>¥110</td>
+</tr>
+<tr>
+<td><strong>切り上げ</strong></td>
+<td>小数点以下を切り上げ</td>
+<td>¥110</td>
+</tr>
+</tbody></table>
+<h3>AI自動省略機能</h3>
+<p>商品説明が長すぎてテキストボックスに収まらない場合、自動的にAIが要約して短くしてくれます。</p>
+<hr>
+<h2>Step 6: 印刷・PDF出力</h2>
+<p>完成したポップを印刷またはPDFで出力します。</p>
+<h3>画面の構成</h3>
+<pre><code>┌──────────────────────────────────────────────────────┐
+│  印刷設定パネル                                       │
+│  （枠線表示、位置調整、用紙サイズ）                    │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│      印刷プレビュー                                   │
+│    （A4用紙に配置されたイメージ）                     │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  ページナビゲーション  │  出力ボタン                  │
+└──────────────────────────────────────────────────────┘
+</code></pre>
+<h3>印刷設定</h3>
+<table>
+<thead>
+<tr>
+<th>設定項目</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>枠線表示</strong></td>
+<td>ON にするとカット位置の目安線が表示される</td>
+</tr>
+<tr>
+<td><strong>位置調整（上下）</strong></td>
+<td>印刷位置を上下にずらす（mm単位）</td>
+</tr>
+<tr>
+<td><strong>位置調整（左右）</strong></td>
+<td>印刷位置を左右にずらす（mm単位）</td>
+</tr>
+<tr>
+<td><strong>用紙サイズ</strong></td>
+<td>A4、B4、B5など</td>
+</tr>
+</tbody></table>
+<h3>出力方法</h3>
+<table>
+<thead>
+<tr>
+<th>ボタン</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>印刷</strong></td>
+<td>ブラウザの印刷画面が開く。そのまま印刷できます</td>
+</tr>
+<tr>
+<td><strong>PDF書き出し</strong></td>
+<td>PDFファイルとしてダウンロード</td>
+</tr>
+</tbody></table>
+<h3>レイアウト情報</h3>
+<p>画面に表示される情報：</p>
+<ul>
+<li>商品数</li>
+<li>ページ数</li>
+<li>1ページあたりの配置（例: 2列×4行）</li>
+<li>空白フレーム数</li>
+</ul>
+<hr>
+<h2>保存と読み込み</h2>
+<h3>保存の種類</h3>
+<table>
+<thead>
+<tr>
+<th>種類</th>
+<th>保存される内容</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>テンプレート</strong></td>
+<td>デザインのみ</td>
+<td>繰り返し使うデザインを保存</td>
+</tr>
+<tr>
+<td><strong>プロジェクト</strong></td>
+<td>デザイン＋商品データ</td>
+<td>作業途中のものを後で再開</td>
+</tr>
+</tbody></table>
+<h3>保存方法</h3>
+<ol>
+<li>印刷画面の <strong>「保存」</strong> ボタンをクリック</li>
+<li>名前を入力</li>
+<li>「テンプレートとして保存」または「プロジェクトとして保存」を選択</li>
+<li><strong>「保存」</strong> をクリック</li>
+</ol>
+<h3>読み込み方法</h3>
+<ol>
+<li>スタート画面で <strong>「保存データから選ぶ」</strong> をクリック</li>
+<li>一覧から開きたいプロジェクトをクリック</li>
+<li>続きから作業を再開</li>
+</ol>
+<hr>
+<h2>便利なショートカットキー</h2>
+<h3>基本操作</h3>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>動作</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Ctrl</code> + <code>Z</code></td>
+<td>元に戻す（Undo）</td>
+</tr>
+<tr>
+<td><code>Ctrl</code> + <code>Shift</code> + <code>Z</code> または <code>Ctrl</code> + <code>Y</code></td>
+<td>やり直し（Redo）</td>
+</tr>
+<tr>
+<td><code>Ctrl</code> + <code>C</code></td>
+<td>コピー</td>
+</tr>
+<tr>
+<td><code>Ctrl</code> + <code>V</code></td>
+<td>貼り付け</td>
+</tr>
+<tr>
+<td><code>Delete</code> または <code>Backspace</code></td>
+<td>削除</td>
+</tr>
+<tr>
+<td><code>Escape</code></td>
+<td>選択解除</td>
+</tr>
+</tbody></table>
+<h3>移動操作</h3>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>動作</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>←</code> <code>→</code> <code>↑</code> <code>↓</code></td>
+<td>0.1mm移動</td>
+</tr>
+<tr>
+<td><code>Shift</code> + <code>←</code> <code>→</code> <code>↑</code> <code>↓</code></td>
+<td>1mm移動</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>よくある質問（Q&amp;A）</h2>
+<h3>Q: 商品が見つかりません</h3>
+<p><strong>A:</strong> 以下を確認してください：</p>
+<ul>
+<li>キーワードの入力ミスがないか</li>
+<li>フィルターが絞り込みすぎていないか</li>
+<li>スマレジに商品が登録されているか</li>
+</ul>
+<h3>Q: プレースホルダーが置き換わりません</h3>
+<p><strong>A:</strong> 以下を確認してください：</p>
+<ul>
+<li><code>{{</code> と <code>}}</code> で正しく囲んでいるか</li>
+<li>プレースホルダー名のスペルが正しいか（大文字小文字も注意）</li>
+<li>商品データが選択されているか</li>
+</ul>
+<h3>Q: 印刷位置がずれます</h3>
+<p><strong>A:</strong> 印刷画面の「位置調整」で上下・左右のオフセットを調整してください。プリンターによって微調整が必要な場合があります。</p>
+<h3>Q: PDFの文字がおかしい</h3>
+<p><strong>A:</strong> ブラウザを再読み込みしてから、もう一度お試しください。</p>
+<h3>Q: 保存したデータはどこにありますか？</h3>
+<p><strong>A:</strong> データはブラウザ内に保存されています。</p>
+<ul>
+<li>同じPC、同じブラウザでのみ読み込めます</li>
+<li>ブラウザのデータを削除すると消えてしまいます</li>
+</ul>
+<h3>Q: 別のPCで使いたい</h3>
+<p><strong>A:</strong> 現在は同じPCのみで利用可能です。PDFで出力して共有することは可能です。</p>
+<hr>
+<h2>サポート</h2>
+<p>問題が解決しない場合は、システム管理者にお問い合わせください。</p>
+<hr>
+<p><strong>ポップメイト</strong> - スマレジ連携プライスポップ作成ツール</p>
+<p>最終更新: 2026年2月</p>
+
+</body>
+</html>
