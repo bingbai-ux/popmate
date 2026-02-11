@@ -1,5 +1,9 @@
 // カスタムテンプレートの型定義
 
+import { getUserId, getUserIdSync } from '@/lib/userIdentity';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://popmate-production.up.railway.app';
+
 export interface CustomTemplate {
   id: string;
   name: string;
@@ -57,7 +61,7 @@ export function getCustomTemplates(): CustomTemplate[] {
   return saved ? JSON.parse(saved) : [];
 }
 
-// カスタムテンプレートを保存
+// カスタムテンプレートを保存（ローカル + バックエンド同期）
 export function saveCustomTemplate(template: Omit<CustomTemplate, 'id' | 'isSystem' | 'createdAt'>): CustomTemplate {
   const templates = getCustomTemplates();
   const newTemplate: CustomTemplate = {
@@ -68,17 +72,29 @@ export function saveCustomTemplate(template: Omit<CustomTemplate, 'id' | 'isSyst
   };
   templates.push(newTemplate);
   localStorage.setItem('customTemplates', JSON.stringify(templates));
+
+  // バックエンドに非同期で同期（エラーがあっても保存を妨げない）
+  syncTemplateToBackend(newTemplate).catch(e =>
+    console.warn('[template] バックエンド同期失敗（保存）:', e)
+  );
+
   return newTemplate;
 }
 
-// カスタムテンプレートを削除
+// カスタムテンプレートを削除（ローカル + バックエンド同期）
 export function deleteCustomTemplate(id: string): boolean {
   const templates = getCustomTemplates();
   const template = templates.find(t => t.id === id);
   if (!template || template.isSystem) return false;
-  
+
   const filtered = templates.filter(t => t.id !== id);
   localStorage.setItem('customTemplates', JSON.stringify(filtered));
+
+  // バックエンドから非同期で削除
+  deleteTemplateFromBackend(id).catch(e =>
+    console.warn('[template] バックエンド同期失敗（削除）:', e)
+  );
+
   return true;
 }
 
@@ -90,4 +106,110 @@ export function getAllTemplates(): CustomTemplate[] {
 // IDでテンプレートを取得
 export function getTemplateById(id: string): CustomTemplate | undefined {
   return getAllTemplates().find(t => t.id === id);
+}
+
+// ─── バックエンド同期関数 ───
+
+/**
+ * カスタムテンプレートをバックエンドに保存
+ */
+async function syncTemplateToBackend(template: CustomTemplate): Promise<void> {
+  const userId = await getUserId();
+  if (!userId) return;
+
+  await fetch(`${API_BASE}/api/templates`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-user-id': userId,
+    },
+    body: JSON.stringify({
+      name: template.name,
+      type: 'custom',
+      width_mm: template.width,
+      height_mm: template.height,
+      design_data: {
+        background: { color: '#ffffff' },
+        elements: [],
+        description: template.description,
+        localId: template.id,
+      },
+    }),
+  });
+}
+
+/**
+ * カスタムテンプレートをバックエンドから削除
+ */
+async function deleteTemplateFromBackend(localId: string): Promise<void> {
+  const userId = await getUserId();
+  if (!userId) return;
+
+  // ローカルIDでバックエンドのテンプレートを検索して削除
+  try {
+    const res = await fetch(`${API_BASE}/api/templates/user`, {
+      headers: { 'x-user-id': userId },
+    });
+    if (!res.ok) return;
+    const { data } = await res.json();
+    const remote = data?.find((t: any) => t.design_data?.localId === localId);
+    if (remote) {
+      await fetch(`${API_BASE}/api/templates/${remote.id}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': userId },
+      });
+    }
+  } catch {
+    // バックエンド削除失敗は無視
+  }
+}
+
+/**
+ * バックエンドからカスタムテンプレートを取得してローカルとマージ
+ */
+export async function fetchAndMergeRemoteTemplates(): Promise<CustomTemplate[]> {
+  const userId = await getUserId();
+  if (!userId) return getCustomTemplates();
+
+  try {
+    const res = await fetch(`${API_BASE}/api/templates/user`, {
+      headers: { 'x-user-id': userId },
+      cache: 'no-store',
+    });
+    if (!res.ok) return getCustomTemplates();
+
+    const { data } = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return getCustomTemplates();
+
+    const localTemplates = getCustomTemplates();
+    const localIds = new Set(localTemplates.map(t => t.id));
+
+    // リモートにあってローカルにないテンプレートを追加
+    const remoteTemplates: CustomTemplate[] = data
+      .filter((t: any) => !t.is_system)
+      .map((t: any) => ({
+        id: t.design_data?.localId || `remote-${t.id}`,
+        name: t.name,
+        description: t.design_data?.description || '',
+        width: t.width_mm,
+        height: t.height_mm,
+        isSystem: false,
+        createdAt: t.created_at,
+      }));
+
+    // マージ: ローカルに存在しないリモートテンプレートを追加
+    let merged = [...localTemplates];
+    for (const remote of remoteTemplates) {
+      if (!localIds.has(remote.id)) {
+        merged.push(remote);
+      }
+    }
+
+    // ローカルストレージを更新
+    localStorage.setItem('customTemplates', JSON.stringify(merged));
+    return merged;
+  } catch (e) {
+    console.warn('[template] リモートテンプレート取得失敗:', e);
+    return getCustomTemplates();
+  }
 }

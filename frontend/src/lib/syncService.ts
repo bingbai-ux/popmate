@@ -5,6 +5,7 @@
 
 import { db } from './db';
 import { SavedProject } from '@/types/project';
+import { getUserId, getUserIdSync } from './userIdentity';
 
 // 同期状態
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
@@ -217,6 +218,17 @@ class SyncService {
   }
 
   /**
+   * リクエストヘッダーを構築（x-user-id を含む）
+   */
+  private getHeaders(contentType = false): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (contentType) headers['Content-Type'] = 'application/json';
+    const userId = getUserIdSync();
+    if (userId) headers['x-user-id'] = userId;
+    return headers;
+  }
+
+  /**
    * 個別のキューアイテムを処理
    */
   private async processQueueItem(item: SyncQueueItem): Promise<void> {
@@ -226,7 +238,7 @@ class SyncService {
       case 'create':
         await fetch(`${apiBaseUrl}/api/saved-pops`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.getHeaders(true),
           body: JSON.stringify(this.convertToApiFormat(item.data as SavedProject)),
           credentials: 'include',
         });
@@ -235,7 +247,7 @@ class SyncService {
       case 'update':
         await fetch(`${apiBaseUrl}/api/saved-pops/${item.projectId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.getHeaders(true),
           body: JSON.stringify(this.convertToApiFormat(item.data as Partial<SavedProject>)),
           credentials: 'include',
         });
@@ -244,6 +256,7 @@ class SyncService {
       case 'delete':
         await fetch(`${apiBaseUrl}/api/saved-pops/${item.projectId}`, {
           method: 'DELETE',
+          headers: this.getHeaders(),
           credentials: 'include',
         });
         break;
@@ -293,6 +306,7 @@ class SyncService {
 
     try {
       const response = await fetch(`${apiBaseUrl}/api/saved-pops`, {
+        headers: this.getHeaders(),
         credentials: 'include',
       });
 

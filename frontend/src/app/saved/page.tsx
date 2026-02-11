@@ -8,6 +8,8 @@ import ProjectGrid from '@/components/saved/ProjectGrid';
 import { SavedProject } from '@/types/project';
 import { getSavedProjects, deleteProject, duplicateProject } from '@/lib/projectStorage';
 import { saveSelectedProducts } from '@/lib/selectedProductsStorage';
+import { syncService } from '@/lib/syncService';
+import { getUserId } from '@/lib/userIdentity';
 
 export default function SavedPage() {
   const router = useRouter();
@@ -22,6 +24,16 @@ export default function SavedPage() {
       const data = await getSavedProjects();
       console.log('[saved] ★ loaded projects:', data.map(p => ({ id: p.id, name: p.name, saveType: p.saveType })));
       setProjects(data);
+
+      // バックエンドからリモートデータを同期
+      try {
+        await getUserId();
+        await syncService.pullFromRemote();
+        const refreshed = await getSavedProjects();
+        setProjects(refreshed);
+      } catch {
+        // リモート同期失敗はローカルデータで継続
+      }
     } catch (error) {
       console.error('Failed to load projects:', error);
     } finally {

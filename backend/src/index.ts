@@ -62,12 +62,20 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-user-id'],
   maxAge: 86400 // プリフライトキャッシュ: 24時間
 }));
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// x-user-id が未指定の場合、CONTRACT_ID をフォールバックとして使用
+app.use((req, res, next) => {
+  if (!req.headers['x-user-id'] && process.env.SMAREGI_CONTRACT_ID) {
+    req.headers['x-user-id'] = process.env.SMAREGI_CONTRACT_ID;
+  }
+  next();
+});
 
 // ヘルスチェック
 app.get('/health', (req, res) => {

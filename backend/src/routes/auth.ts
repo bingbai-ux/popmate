@@ -27,4 +27,31 @@ router.get('/smaregi/status', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/auth/identity
+ * 現在のユーザーID（契約ID）を返す
+ * テンプレート同期などでユーザー識別に使用
+ */
+router.get('/identity', async (req: Request, res: Response) => {
+  try {
+    const contractId = process.env.SMAREGI_CONTRACT_ID;
+    if (!contractId) {
+      return res.status(500).json({
+        success: false,
+        error: 'Contract ID not configured',
+      });
+    }
+    res.json({
+      success: true,
+      userId: contractId,
+    });
+  } catch (error: any) {
+    console.error('[Auth Identity Error]', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Unknown error',
+    });
+  }
+});
+
 export default router;
