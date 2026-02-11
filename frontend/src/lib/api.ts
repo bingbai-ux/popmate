@@ -52,8 +52,10 @@ const MOCK_PRODUCTS: Product[] = [
 ];
 
 // ─── 税率判定 ───
+// reduceTaxId が設定されている商品はすべて軽減税率8%（食品・飲料等）
+// null/undefined の場合は標準税率10%（雑貨・アルコール等）
 function determineTaxRate(reduceTaxId: string | null | undefined): number {
-  if (reduceTaxId === '10000001' || reduceTaxId === '10000003') return 8;
+  if (reduceTaxId) return 8;
   return 10;
 }
 
