@@ -5,6 +5,7 @@ import { SavedProject, CreateProjectInput, UpdateProjectInput, GetProjectsOption
 import { DEFAULT_TAX_SETTINGS } from '@/types/editor';
 import { Product } from '@/types/product';
 import { EditorElement } from '@/types/editor';
+import { syncService } from './syncService';
 
 /**
  * ユニークIDを生成
@@ -47,7 +48,17 @@ export async function saveProject(data: {
   };
 
   console.log('[projectStorage] ★ saving project:', { id: project.id, name: project.name, saveType: project.saveType });
+
+  // 既存プロジェクトかどうか確認
+  const existing = await db.projects.get(project.id);
   await db.projects.put(project);
+
+  // バックエンドに同期
+  syncService.queueSync(
+    project.id,
+    existing ? 'update' : 'create',
+    project,
+  ).catch(e => console.warn('[projectStorage] sync queue failed:', e));
 }
 
 /**
@@ -70,6 +81,11 @@ export async function createProject(input: CreateProjectInput): Promise<SavedPro
   };
 
   await db.projects.add(project);
+
+  // バックエンドに同期
+  syncService.queueSync(project.id, 'create', project)
+    .catch(e => console.warn('[projectStorage] sync queue failed:', e));
+
   return project;
 }
 
@@ -90,6 +106,11 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
   };
 
   await db.projects.put(updatedProject);
+
+  // バックエンドに同期
+  syncService.queueSync(updatedProject.id, 'update', updatedProject)
+    .catch(e => console.warn('[projectStorage] sync queue failed:', e));
+
   return updatedProject;
 }
 
@@ -142,6 +163,11 @@ export async function getSavedProjects(): Promise<SavedProject[]> {
 export async function deleteProject(id: string): Promise<boolean> {
   try {
     await db.projects.delete(id);
+
+    // バックエンドから削除を同期
+    syncService.queueSync(id, 'delete')
+      .catch(e => console.warn('[projectStorage] sync queue failed:', e));
+
     return true;
   } catch (error) {
     console.error('Failed to delete project:', error);
@@ -169,6 +195,11 @@ export async function duplicateProject(id: string, newName?: string): Promise<Sa
   };
 
   await db.projects.add(duplicated);
+
+  // バックエンドに同期
+  syncService.queueSync(duplicated.id, 'create', duplicated)
+    .catch(e => console.warn('[projectStorage] sync queue failed:', e));
+
   return duplicated;
 }
 

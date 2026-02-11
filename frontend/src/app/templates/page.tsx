@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import ProgressBar from '@/components/ProgressBar';
 import Link from 'next/link';
-import { CustomTemplate, getAllTemplates, deleteCustomTemplate } from '@/types/template';
+import { CustomTemplate, getAllTemplates, deleteCustomTemplate, fetchAndMergeRemoteTemplates, DEFAULT_TEMPLATES } from '@/types/template';
 import { SavedProject } from '@/types/project';
 import { getSavedTemplates, deleteProject, duplicateProject } from '@/lib/projectStorage';
 import { saveEditorState } from '@/lib/editorStorage';
+import { syncService } from '@/lib/syncService';
+import { getUserId } from '@/lib/userIdentity';
 
 export default function TemplatesPage() {
   const router = useRouter();
@@ -18,9 +20,28 @@ export default function TemplatesPage() {
   const [deleteSavedConfirm, setDeleteSavedConfirm] = useState<SavedProject | null>(null);
 
   const loadData = useCallback(async () => {
+    // まずローカルデータを即座に表示
     setTemplates(getAllTemplates());
     const saved = await getSavedTemplates();
     setSavedTemplates(saved);
+
+    // バックエンドからリモートデータをマージ（非同期）
+    try {
+      await getUserId(); // ユーザーIDをキャッシュ
+      const mergedTemplates = await fetchAndMergeRemoteTemplates();
+      setTemplates([...DEFAULT_TEMPLATES, ...mergedTemplates]);
+
+      // 保存テンプレートもリモートから同期
+      try {
+        await syncService.pullFromRemote();
+        const refreshed = await getSavedTemplates();
+        setSavedTemplates(refreshed);
+      } catch {
+        // リモート同期失敗はローカルデータで継続
+      }
+    } catch {
+      // リモート取得失敗はローカルデータで継続
+    }
   }, []);
 
   useEffect(() => {
