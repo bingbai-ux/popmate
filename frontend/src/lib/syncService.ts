@@ -265,6 +265,7 @@ class SyncService {
 
   /**
    * ローカル形式をAPI形式に変換
+   * design_data にデザイン要素・メタ情報を全て格納
    */
   private convertToApiFormat(project: Partial<SavedProject>): Record<string, unknown> {
     return {
@@ -274,6 +275,11 @@ class SyncService {
       design_data: {
         background: { color: '#ffffff' },
         elements: project.elements || [],
+        // メタ情報（他デバイスで復元するために必要）
+        saveType: project.saveType || 'project',
+        template: project.template,
+        taxSettings: project.taxSettings,
+        thumbnail: project.thumbnail,
       },
       selected_products: project.selectedProducts?.map(p => ({
         product_id: p.productId,
@@ -343,9 +349,16 @@ class SyncService {
 
   /**
    * API形式からローカル形式に変換
+   * design_data 内のメタ情報も復元する
    */
   private convertFromApiFormat(apiData: Record<string, unknown>): SavedProject {
-    const designData = apiData.design_data as { elements?: unknown[] } | undefined;
+    const designData = apiData.design_data as {
+      elements?: unknown[];
+      saveType?: string;
+      template?: { id: string; name: string; width: number; height: number };
+      taxSettings?: { enabled: boolean; taxRate: number; roundingMode: string };
+      thumbnail?: string;
+    } | undefined;
     const selectedProducts = apiData.selected_products as Array<{
       product_id: string;
       product_code: string;
@@ -355,18 +368,22 @@ class SyncService {
       category_name?: string;
     }> | undefined;
 
+    // テンプレート情報: design_data内のメタ情報を優先、なければAPIフィールドから復元
+    const template = designData?.template || {
+      id: 'custom',
+      name: 'カスタム',
+      width: apiData.width_mm as number,
+      height: apiData.height_mm as number,
+    };
+
     return {
       id: apiData.id as string,
       name: apiData.name as string,
-      saveType: 'project',
+      saveType: (designData?.saveType as 'template' | 'project') || 'project',
       createdAt: new Date(apiData.created_at as string),
       updatedAt: new Date(apiData.updated_at as string),
-      template: {
-        id: 'custom',
-        name: 'カスタム',
-        width: apiData.width_mm as number,
-        height: apiData.height_mm as number,
-      },
+      thumbnail: designData?.thumbnail,
+      template,
       elements: (designData?.elements || []) as SavedProject['elements'],
       selectedProducts: selectedProducts?.map(p => ({
         productId: p.product_id,
@@ -376,10 +393,10 @@ class SyncService {
         taxRate: p.tax_rate,
         categoryName: p.category_name,
       })) as SavedProject['selectedProducts'] || [],
-      taxSettings: {
+      taxSettings: (designData?.taxSettings as SavedProject['taxSettings']) || {
         enabled: true,
         taxRate: 10,
-        roundingMode: 'floor',
+        roundingMode: 'floor' as const,
       },
       editedProductData: {},
     };
