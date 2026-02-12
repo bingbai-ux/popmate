@@ -6,7 +6,7 @@ import { SaveType } from '@/types/project';
 interface SaveModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (name: string, saveType: SaveType) => void;
+  onSave: (name: string, saveType: SaveType, overwriteId?: string) => void;
   defaultName?: string;
   isLoading?: boolean;
   isOverwrite?: boolean;
@@ -14,10 +14,12 @@ interface SaveModalProps {
   /** 上書き時は保存タイプ変更不可 */
   currentSaveType?: SaveType;
   productCount?: number;
+  /** 同名プロジェクトの検索（上書き確認用） */
+  onFindDuplicate?: (name: string, saveType: SaveType) => Promise<{ id: string; name: string } | null>;
 }
 
 /**
- * 保存モーダル（タイプ選択＋タイトル入力）
+ * 保存モーダル（タイプ選択＋タイトル入力＋同名上書き確認）
  */
 export function SaveModal({
   isOpen,
@@ -29,10 +31,12 @@ export function SaveModal({
   isSaving = false,
   currentSaveType,
   productCount = 0,
+  onFindDuplicate,
 }: SaveModalProps) {
   const [name, setName] = useState(defaultName);
   const [saveType, setSaveType] = useState<SaveType>(currentSaveType || 'project');
   const [error, setError] = useState('');
+  const [overwriteConfirm, setOverwriteConfirm] = useState<{ id: string; name: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const loading = isLoading || isSaving;
@@ -40,6 +44,7 @@ export function SaveModal({
   useEffect(() => {
     if (isOpen && inputRef.current) {
       setName(defaultName);
+      setOverwriteConfirm(null);
       if (currentSaveType) setSaveType(currentSaveType);
       setTimeout(() => {
         inputRef.current?.focus();
@@ -50,15 +55,21 @@ export function SaveModal({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) onClose();
+      if (e.key === 'Escape' && isOpen) {
+        if (overwriteConfirm) {
+          setOverwriteConfirm(null);
+        } else {
+          onClose();
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, overwriteConfirm]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError('名前を入力してください');
@@ -69,11 +80,78 @@ export function SaveModal({
       return;
     }
     setError('');
+
+    // 同名チェック（新規保存時のみ）
+    if (!isOverwrite && onFindDuplicate) {
+      const duplicate = await onFindDuplicate(name.trim(), saveType);
+      if (duplicate) {
+        setOverwriteConfirm(duplicate);
+        return;
+      }
+    }
+
     console.log('[SaveModal] ★ onSave called:', { name: name.trim(), saveType });
     onSave(name.trim(), saveType);
   };
 
+  const handleOverwriteConfirm = () => {
+    if (!overwriteConfirm) return;
+    console.log('[SaveModal] ★ overwrite confirmed:', { name: name.trim(), saveType, overwriteId: overwriteConfirm.id });
+    onSave(name.trim(), saveType, overwriteConfirm.id);
+    setOverwriteConfirm(null);
+  };
+
   const canSelectType = !isOverwrite;
+
+  // 上書き確認ポップアップ
+  if (overwriteConfirm) {
+    const typeLabel = saveType === 'template' ? 'テンプレート' : 'プロジェクト';
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/50" onClick={() => setOverwriteConfirm(null)} />
+        <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+          <div className="text-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-amber-100 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-800 mb-2">
+              同じ名前の{typeLabel}があります
+            </h3>
+            <p className="text-gray-600 mb-1">
+              「{overwriteConfirm.name}」はすでに存在します。
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              上書きすると既存のデータは置き換えられます。
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setOverwriteConfirm(null)}
+                className="flex-1 py-3 px-4 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleOverwriteConfirm}
+                disabled={loading}
+                className="flex-1 py-3 px-4 bg-amber-500 text-white font-medium rounded-xl hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                    保存中...
+                  </>
+                ) : (
+                  '上書き保存'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">

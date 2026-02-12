@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import ProgressBar from '@/components/ProgressBar';
 import { SaveModal } from '@/components/SaveModal';
-import { saveProject, generateProjectId } from '@/lib/projectStorage';
+import { saveProject, generateProjectId, findProjectByName } from '@/lib/projectStorage';
 import { SaveType } from '@/types/project';
 import { Product } from '@/types/product';
 import {
@@ -153,12 +153,22 @@ function PrintContent() {
     }
   };
 
+  // --- 同名プロジェクト検索（SaveModalから呼ばれる） ---
+  const handleFindDuplicate = async (name: string, saveType: SaveType) => {
+    const existing = await findProjectByName(name, saveType, currentProjectId || undefined);
+    if (existing) {
+      return { id: existing.id, name: existing.name };
+    }
+    return null;
+  };
+
   // --- 保存処理 ---
-  const handleSave = async (name: string, saveType: SaveType) => {
-    console.log('[save] ★ handleSave called:', { name, saveType });
+  const handleSave = async (name: string, saveType: SaveType, overwriteId?: string) => {
+    console.log('[save] ★ handleSave called:', { name, saveType, overwriteId });
     setIsSaving(true);
     try {
-      const projectId = currentProjectId || generateProjectId();
+      // 上書き先IDがあればそれを使い、なければ現在のプロジェクトID or 新規ID
+      const projectId = overwriteId || currentProjectId || generateProjectId();
 
       // サムネイル生成
       let thumbnail: string | undefined;
@@ -196,7 +206,8 @@ function PrintContent() {
       setShowSaveModal(false);
 
       const typeLabel = saveType === 'template' ? 'テンプレート' : 'プロジェクト';
-      alert(`${typeLabel}として保存しました！`);
+      const actionLabel = overwriteId ? '上書き保存' : '保存';
+      alert(`${typeLabel}として${actionLabel}しました！`);
 
     } catch (error) {
       console.error('[save] エラー:', error);
@@ -713,6 +724,7 @@ function PrintContent() {
         isSaving={isSaving}
         currentSaveType={currentSaveType}
         productCount={products.length}
+        onFindDuplicate={handleFindDuplicate}
       />
     </div>
   );

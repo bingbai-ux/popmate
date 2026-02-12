@@ -123,6 +123,23 @@ export async function getProject(id: string): Promise<SavedProject | null> {
 }
 
 /**
+ * 同じ名前・同じ保存タイプのプロジェクトを検索（上書き確認用）
+ * 自分自身（excludeId）は除外する
+ */
+export async function findProjectByName(
+  name: string,
+  saveType: SaveType,
+  excludeId?: string,
+): Promise<SavedProject | null> {
+  const all = await db.projects.toArray();
+  return all.find(p =>
+    p.name === name &&
+    p.saveType === saveType &&
+    p.id !== excludeId
+  ) || null;
+}
+
+/**
  * プロジェクト一覧を取得
  */
 export async function getProjects(options: GetProjectsOptions = {}): Promise<SavedProject[]> {
