@@ -39,7 +39,7 @@ interface SyncConfig {
 }
 
 const DEFAULT_CONFIG: SyncConfig = {
-  apiBaseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+  apiBaseUrl: process.env.NEXT_PUBLIC_API_URL || 'https://popmate-production.up.railway.app',
   autoSync: true,
   syncInterval: 30000,  // 30秒
   maxRetries: 3,
@@ -187,11 +187,20 @@ class SyncService {
    */
   async processSyncQueue(): Promise<void> {
     if (this.status === 'syncing' || !this.isOnline || this.syncQueue.length === 0) {
+      console.log('[syncService] processSyncQueue skip:', { status: this.status, online: this.isOnline, queueLen: this.syncQueue.length });
       return;
     }
 
+    console.log('[syncService] processSyncQueue: starting, queue length:', this.syncQueue.length);
+
     // ユーザーIDを事前に取得（incognito等でlocalStorageにない場合もAPIから取得）
-    await ensureUserId();
+    const userId = await ensureUserId();
+    console.log('[syncService] processSyncQueue: userId:', userId || 'NONE');
+
+    if (!userId) {
+      console.error('[syncService] processSyncQueue: no user ID available, aborting sync');
+      return;
+    }
 
     this.status = 'syncing';
     this.emit({ type: 'sync_started' });
@@ -205,10 +214,11 @@ class SyncService {
         this.syncQueue = this.syncQueue.filter(i => i.id !== item.id);
         synced++;
       } catch (error) {
-        console.error(`Sync failed for ${item.projectId}:`, error);
+        console.error(`[syncService] Sync failed for ${item.projectId} (attempt ${item.retryCount + 1}):`, error);
         item.retryCount++;
 
         if (item.retryCount >= this.config.maxRetries) {
+          console.error(`[syncService] Max retries reached for ${item.projectId}, dropping from queue`);
           this.syncQueue = this.syncQueue.filter(i => i.id !== item.id);
           failed++;
         }
@@ -217,6 +227,7 @@ class SyncService {
 
     this.saveSyncQueue();
     this.status = 'idle';
+    console.log('[syncService] processSyncQueue: done, synced:', synced, 'failed:', failed);
     this.emit({ type: 'sync_completed', synced, failed });
   }
 
@@ -236,33 +247,62 @@ class SyncService {
    */
   private async processQueueItem(item: SyncQueueItem): Promise<void> {
     const { apiBaseUrl } = this.config;
+    const headers = this.getHeaders(true);
+
+    // ユーザーIDが取得できていない場合はエラー
+    if (!headers['x-user-id']) {
+      throw new Error('User ID not available for sync');
+    }
+
+    console.log(`[syncService] processing ${item.action} for ${item.projectId}, url: ${apiBaseUrl}`);
 
     switch (item.action) {
-      case 'create':
-        await fetch(`${apiBaseUrl}/api/saved-pops`, {
+      case 'create': {
+        const body = this.convertToApiFormat(item.data as SavedProject);
+        console.log('[syncService] POST /api/saved-pops body:', JSON.stringify(body).slice(0, 200));
+        const res = await fetch(`${apiBaseUrl}/api/saved-pops`, {
           method: 'POST',
-          headers: this.getHeaders(true),
-          body: JSON.stringify(this.convertToApiFormat(item.data as SavedProject)),
+          headers,
+          body: JSON.stringify(body),
           credentials: 'include',
         });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`POST /api/saved-pops failed (${res.status}): ${text}`);
+        }
+        const result = await res.json().catch(() => null);
+        console.log('[syncService] POST success:', result?.data?.id);
         break;
+      }
 
-      case 'update':
-        await fetch(`${apiBaseUrl}/api/saved-pops/${item.projectId}`, {
+      case 'update': {
+        const res = await fetch(`${apiBaseUrl}/api/saved-pops/${item.projectId}`, {
           method: 'PUT',
-          headers: this.getHeaders(true),
+          headers,
           body: JSON.stringify(this.convertToApiFormat(item.data as Partial<SavedProject>)),
           credentials: 'include',
         });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`PUT /api/saved-pops/${item.projectId} failed (${res.status}): ${text}`);
+        }
+        console.log('[syncService] PUT success:', item.projectId);
         break;
+      }
 
-      case 'delete':
-        await fetch(`${apiBaseUrl}/api/saved-pops/${item.projectId}`, {
+      case 'delete': {
+        const res = await fetch(`${apiBaseUrl}/api/saved-pops/${item.projectId}`, {
           method: 'DELETE',
           headers: this.getHeaders(),
           credentials: 'include',
         });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`DELETE /api/saved-pops/${item.projectId} failed (${res.status}): ${text}`);
+        }
+        console.log('[syncService] DELETE success:', item.projectId);
         break;
+      }
     }
   }
 
@@ -271,7 +311,7 @@ class SyncService {
    * design_data にデザイン要素・メタ情報を全て格納
    */
   private convertToApiFormat(project: Partial<SavedProject>): Record<string, unknown> {
-    return {
+    const result: Record<string, unknown> = {
       name: project.name,
       width_mm: project.template?.width,
       height_mm: project.template?.height,
@@ -301,6 +341,13 @@ class SyncService {
         margin_mm: 5,
       },
     };
+
+    // UUID形式のIDを含める（レガシーのproj-形式は除外）
+    if (project.id && !project.id.startsWith('proj-')) {
+      result.id = project.id;
+    }
+
+    return result;
   }
 
   /**
@@ -317,16 +364,25 @@ class SyncService {
     const { apiBaseUrl } = this.config;
 
     try {
+      const headers = this.getHeaders();
+      console.log('[syncService] pullFromRemote: fetching from', `${apiBaseUrl}/api/saved-pops`, 'userId:', headers['x-user-id'] || 'MISSING');
+
+      if (!headers['x-user-id']) {
+        throw new Error('User ID not available for pull');
+      }
+
       const response = await fetch(`${apiBaseUrl}/api/saved-pops`, {
-        headers: this.getHeaders(),
+        headers,
         credentials: 'include',
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch remote data');
+        const text = await response.text().catch(() => '');
+        throw new Error(`GET /api/saved-pops failed (${response.status}): ${text}`);
       }
 
       const { data: remotePops } = await response.json();
+      console.log('[syncService] pullFromRemote: got', remotePops?.length || 0, 'remote records');
       let imported = 0;
 
       for (const remotePop of remotePops || []) {
@@ -334,7 +390,9 @@ class SyncService {
 
         if (!localProject) {
           // ローカルに存在しない場合は作成
-          await db.projects.add(this.convertFromApiFormat(remotePop));
+          const converted = this.convertFromApiFormat(remotePop);
+          console.log('[syncService] pullFromRemote: importing', converted.id, converted.name);
+          await db.projects.add(converted);
           imported++;
         } else {
           // コンフリクト解決
@@ -346,9 +404,10 @@ class SyncService {
         }
       }
 
+      console.log('[syncService] pullFromRemote: imported', imported, 'records');
       return imported;
     } catch (error) {
-      console.error('Pull from remote failed:', error);
+      console.error('[syncService] pullFromRemote failed:', error);
       throw error;
     }
   }

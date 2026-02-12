@@ -177,6 +177,7 @@ export interface UpdateTemplateRequest {
 }
 
 export interface SavePopRequest {
+  id?: string;  // クライアント生成UUID（指定時はそのIDで保存）
   name: string;
   template_id?: string;
   width_mm: number;

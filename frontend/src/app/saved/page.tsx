@@ -27,11 +27,17 @@ export default function SavedPage() {
 
       // バックエンドからリモートデータを同期
       try {
-        await getUserId();
-        await syncService.pullFromRemote();
-        const refreshed = await getSavedProjects();
-        setProjects(refreshed);
-      } catch {
+        const userId = await getUserId();
+        console.log('[saved] ★ userId for pull:', userId || 'NONE');
+        const imported = await syncService.pullFromRemote();
+        console.log('[saved] ★ pull imported:', imported, 'records');
+        if (imported > 0) {
+          const refreshed = await getSavedProjects();
+          console.log('[saved] ★ refreshed projects:', refreshed.map(p => ({ id: p.id, name: p.name })));
+          setProjects(refreshed);
+        }
+      } catch (syncError) {
+        console.error('[saved] ★ remote sync failed:', syncError);
         // リモート同期失敗はローカルデータで継続
       }
     } catch (error) {
