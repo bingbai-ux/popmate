@@ -56,3 +56,14 @@ export function getUserIdSync(): string | null {
   }
   return null;
 }
+
+/**
+ * ユーザーIDが確実に利用可能な状態にする
+ * sync処理の前に呼び出して、incognitoモードでもAPIから取得する
+ */
+export async function ensureUserId(): Promise<string | null> {
+  // すでにキャッシュにあればそのまま返す
+  if (cachedUserId) return cachedUserId;
+  // なければAPIから取得してキャッシュ
+  return getUserId();
+}
