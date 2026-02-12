@@ -8,10 +8,18 @@ import { EditorElement } from '@/types/editor';
 import { syncService } from './syncService';
 
 /**
- * ユニークIDを生成
+ * ユニークIDを生成（UUID v4形式 - Supabaseと互換性あり）
  */
 export function generateProjectId(): string {
-  return `proj-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // フォールバック: UUID v4形式を手動生成
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 }
 
 /**
@@ -53,12 +61,17 @@ export async function saveProject(data: {
   const existing = await db.projects.get(project.id);
   await db.projects.put(project);
 
-  // バックエンドに同期
-  syncService.queueSync(
-    project.id,
-    existing ? 'update' : 'create',
-    project,
-  ).catch(e => console.warn('[projectStorage] sync queue failed:', e));
+  // バックエンドに同期（結果を待機してエラーをログ出力）
+  try {
+    await syncService.queueSync(
+      project.id,
+      existing ? 'update' : 'create',
+      project,
+    );
+    console.log('[projectStorage] ★ sync queued successfully for:', project.id);
+  } catch (e) {
+    console.error('[projectStorage] ★ sync queue failed:', e);
+  }
 }
 
 /**

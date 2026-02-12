@@ -59,20 +59,28 @@ export async function savePop(
   userId: string,
   request: SavePopRequest
 ): Promise<PopmateSavedPop> {
-  console.log('=== savePop ===', { userId, name: request.name });
+  console.log('=== savePop ===', { userId, name: request.name, clientId: request.id });
+
+  // insertデータを構築（クライアントIDがあればそれを使用）
+  const insertData: Record<string, unknown> = {
+    user_id: userId,
+    name: request.name,
+    template_id: request.template_id || null,
+    width_mm: request.width_mm,
+    height_mm: request.height_mm,
+    design_data: request.design_data,
+    selected_products: request.selected_products,
+    print_settings: request.print_settings,
+  };
+
+  // クライアントからUUID形式のIDが提供された場合はそのIDを使用
+  if (request.id) {
+    insertData.id = request.id;
+  }
 
   const { data, error } = await supabase
     .from('popmate_saved_pops')
-    .insert({
-      user_id: userId,
-      name: request.name,
-      template_id: request.template_id || null,
-      width_mm: request.width_mm,
-      height_mm: request.height_mm,
-      design_data: request.design_data,
-      selected_products: request.selected_products,
-      print_settings: request.print_settings
-    })
+    .upsert(insertData)
     .select()
     .single();
 
