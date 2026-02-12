@@ -5,7 +5,7 @@
 
 import { db } from './db';
 import { SavedProject } from '@/types/project';
-import { getUserId, getUserIdSync } from './userIdentity';
+import { getUserId, getUserIdSync, ensureUserId } from './userIdentity';
 
 // 同期状態
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
@@ -190,6 +190,9 @@ class SyncService {
       return;
     }
 
+    // ユーザーIDを事前に取得（incognito等でlocalStorageにない場合もAPIから取得）
+    await ensureUserId();
+
     this.status = 'syncing';
     this.emit({ type: 'sync_started' });
 
@@ -307,6 +310,9 @@ class SyncService {
     if (!this.isOnline) {
       throw new Error('Offline');
     }
+
+    // ユーザーIDを事前に取得
+    await ensureUserId();
 
     const { apiBaseUrl } = this.config;
 
