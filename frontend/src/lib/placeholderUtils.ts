@@ -214,16 +214,14 @@ export async function replaceElementPlaceholdersWithSummarize(
           textElement.content = textElement.content.replace(product.description, summarized);
         }
       } else {
-        // description以外（価格ラベル、商品名等）が溢れた場合
-        // AI要約はテキストの意味を変える可能性があるため（例: 税抜→税込）、
-        // 単純な末尾切り捨てのみ行う
-        console.log('[AI Summarize] non-description overflow, truncating instead of AI:', {
+        // description以外（価格ラベル、商品名等）は切り詰めない
+        // 価格・商品名等は短い固定長テキストであり、安全マージン込みの
+        // effectiveCharsで切り詰めると不必要に「…」が付く
+        // 表示はCSS overflow:hidden で制御される
+        console.log('[AI Summarize] non-description text, skipping truncation:', {
           contentLength: contentWithoutNewlines.length,
           targetChars,
         });
-        if (contentWithoutNewlines.length > targetChars) {
-          textElement.content = contentWithoutNewlines.substring(0, targetChars - 1) + '…';
-        }
       }
     }
   }

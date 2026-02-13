@@ -5,7 +5,7 @@ import { EditorElement, TextElement, ShapeElement, LineElement, BarcodeElement, 
 import PlaceholderMenu from './PlaceholderMenu';
 import FontSelector from './FontSelector';
 import type { RoundingMethod } from '@/lib/api';
-import { estimateTextCapacity } from '@/lib/textUtils';
+import { estimateTextCapacity, estimateRenderedLength, hasPlaceholders } from '@/lib/textUtils';
 
 interface PropertyPanelProps {
   element: EditorElement | null;
@@ -44,13 +44,18 @@ export default function PropertyPanel({
       element.style.letterSpacing,
       element.style.writingMode === 'vertical'
     );
-    const currentLength = element.content.length;
+    // プレースホルダー含有時は推定表示文字数を使用
+    const containsPlaceholders = hasPlaceholders(element.content);
+    const currentLength = containsPlaceholders
+      ? estimateRenderedLength(element.content)
+      : element.content.length;
     const remaining = capacity.chars - currentLength;
     return {
       ...capacity,
       currentLength,
       remaining,
       isOverflow: remaining < 0,
+      containsPlaceholders,
     };
   }, [element]);
 
@@ -115,13 +120,13 @@ export default function PropertyPanel({
                 <div className={`mt-2 p-2 rounded-lg text-xs ${textCapacity.isOverflow ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}>
                   <div className="flex items-center justify-between">
                     <span>
-                      {textCapacity.currentLength} / 約{textCapacity.chars}文字
+                      {textCapacity.containsPlaceholders ? '≈' : ''}{textCapacity.currentLength} / 約{textCapacity.chars}文字
                       {textCapacity.isOverflow && (
                         <span className="ml-1 font-medium">（{Math.abs(textCapacity.remaining)}文字オーバー）</span>
                       )}
                     </span>
                     <span className="text-gray-400">
-                      {textCapacity.lines}行×{textCapacity.charsPerLine}文字
+                      {textCapacity.containsPlaceholders ? '実データで推定' : `${textCapacity.lines}行×${textCapacity.charsPerLine}文字`}
                     </span>
                   </div>
                   {!textCapacity.isOverflow && textCapacity.remaining <= 10 && textCapacity.remaining > 0 && (
