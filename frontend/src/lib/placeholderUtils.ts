@@ -196,7 +196,7 @@ export async function replaceElementPlaceholdersWithSummarize(
       const targetChars = effectiveChars;
 
       if (hasDescription && product.description) {
-        // description部分のみ要約
+        // description部分のみ要約（他のテキストはそのまま保持）
         const descriptionWithoutNewlines = product.description.replace(/\r?\n/g, '');
         // description以外のテキスト部分の文字数を計算し、差し引く
         const otherTextLength = contentWithoutNewlines.length - descriptionWithoutNewlines.length;
@@ -214,15 +214,15 @@ export async function replaceElementPlaceholdersWithSummarize(
           textElement.content = textElement.content.replace(product.description, summarized);
         }
       } else {
-        // description以外（productName等）が溢れた場合、テキスト全体を要約
-        const cacheKey = `${product.productId || product.productCode}-all-${targetChars}`;
-
-        if (summaryCache.has(cacheKey)) {
-          textElement.content = summaryCache.get(cacheKey)!;
-        } else {
-          const summarized = await summarizeText(contentWithoutNewlines, targetChars);
-          summaryCache.set(cacheKey, summarized);
-          textElement.content = summarized;
+        // description以外（価格ラベル、商品名等）が溢れた場合
+        // AI要約はテキストの意味を変える可能性があるため（例: 税抜→税込）、
+        // 単純な末尾切り捨てのみ行う
+        console.log('[AI Summarize] non-description overflow, truncating instead of AI:', {
+          contentLength: contentWithoutNewlines.length,
+          targetChars,
+        });
+        if (contentWithoutNewlines.length > targetChars) {
+          textElement.content = contentWithoutNewlines.substring(0, targetChars - 1) + '…';
         }
       }
     }
