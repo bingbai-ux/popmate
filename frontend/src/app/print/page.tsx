@@ -284,6 +284,7 @@ function PrintContent() {
         return (
           <div
             key={processedElement.id}
+            className="pop-text-outer"
             style={{
               position: 'absolute',
               left,
@@ -298,6 +299,7 @@ function PrintContent() {
             }}
           >
             <div
+              className="pop-text-inner"
               style={{
                 fontFamily: processedElement.style.fontFamily,
                 fontSize: `${processedElement.style.fontSize}px`,
