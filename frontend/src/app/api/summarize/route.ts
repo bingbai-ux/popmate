@@ -65,6 +65,7 @@ async function summarizeWithGemini(text: string, targetChars: number, apiKey: st
 
 以下のルールに従ってください：
 - 必ず${targetChars}文字以内に収めてください
+- できるだけ元の文章を残し、最大限テキストをキープしてください
 - 商品の特徴や魅力を維持してください
 - 自然な日本語で出力してください
 - 「...」や「等」は使わず、完結した文章にしてください
