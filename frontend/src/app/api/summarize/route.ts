@@ -61,7 +61,17 @@ async function summarizeWithGemini(text: string, targetChars: number, apiKey: st
   // 入力テキストから改行を削除
   const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
 
-  const prompt = `あなたは商品説明文を簡潔に要約するアシスタントです。
+  const isShortText = cleanText.length <= 50;
+  const prompt = isShortText
+    ? `以下のテキストを${targetChars}文字以内に短縮してください。
+ルール：
+- 商品名や固有名詞はできるだけ残してください
+- 内容量（g, ml等）は省略可能です
+- 改行は入れず1行で出力してください
+- 短縮したテキストのみを出力してください
+
+テキスト：${cleanText}`
+    : `あなたは商品説明文を簡潔に要約するアシスタントです。
 
 以下のルールに従ってください：
 - 必ず${targetChars}文字以内に収めてください
