@@ -90,6 +90,16 @@ export async function exportA4PDF(
     }
   });
 
+  // ★ POPフレーム内のテキストクリップを防止
+  // html2canvasのフォントメトリクス差異でテキストが切れるため、
+  // キャプチャ中はPOPフレームのoverflowをvisibleに変更
+  const popFrames = printPages.querySelectorAll<HTMLElement>('.pop-frame');
+  const originalOverflows: string[] = [];
+  popFrames.forEach((frame, i) => {
+    originalOverflows.push(frame.style.overflow);
+    frame.style.overflow = 'visible';
+  });
+
   // ★ レイアウト再計算を確実に待機
   await new Promise(resolve => requestAnimationFrame(resolve));
   await new Promise(resolve => setTimeout(resolve, 200));
@@ -133,6 +143,11 @@ export async function exportA4PDF(
       pdf.addImage(imgData, 'JPEG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
     }
   } finally {
+    // ★ POPフレームのoverflowを復元
+    popFrames.forEach((frame, i) => {
+      frame.style.overflow = originalOverflows[i] || '';
+    });
+
     // ★ 全ページの元のスタイルを復元
     pages.forEach((page, i) => {
       const original = originalStyles[i];
