@@ -300,7 +300,6 @@ function PrintContent() {
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent,
-                  overflow: 'hidden',
                 }}
               >
                 <div
@@ -317,7 +316,6 @@ function PrintContent() {
                     textDecoration: processedElement.style.textDecoration,
                     writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
                     whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
-                    overflow: 'hidden',
                     transform: processedElement.style.textWidth !== 100 ? `scaleX(${processedElement.style.textWidth / 100})` : undefined,
                     transformOrigin: 'left top',
                   }}
