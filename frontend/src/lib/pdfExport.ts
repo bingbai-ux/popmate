@@ -90,14 +90,29 @@ export async function exportA4PDF(
     }
   });
 
-  // ★ POPフレーム内のテキストクリップを防止
+  // ★ POPフレーム・テキスト要素のクリップを防止
   // html2canvasのフォントメトリクス差異でテキストが切れるため、
-  // キャプチャ中はPOPフレームのoverflowをvisibleに変更
+  // キャプチャ中はoverflowをvisibleに変更
+  // （overflow変更はレイアウト計算(flex配置)に影響しないためスペーシングは維持される）
   const popFrames = printPages.querySelectorAll<HTMLElement>('.pop-frame');
   const originalOverflows: string[] = [];
   popFrames.forEach((frame, i) => {
     originalOverflows.push(frame.style.overflow);
     frame.style.overflow = 'visible';
+  });
+
+  // テキスト要素コンテナのoverflowも一時解除
+  const textOuters = printPages.querySelectorAll<HTMLElement>('.pop-text-outer');
+  const textInners = printPages.querySelectorAll<HTMLElement>('.pop-text-inner');
+  const originalTextOuterOverflows: string[] = [];
+  const originalTextInnerOverflows: string[] = [];
+  textOuters.forEach((el, i) => {
+    originalTextOuterOverflows.push(el.style.overflow);
+    el.style.overflow = 'visible';
+  });
+  textInners.forEach((el, i) => {
+    originalTextInnerOverflows.push(el.style.overflow);
+    el.style.overflow = 'visible';
   });
 
   // ★ レイアウト再計算を確実に待機
@@ -143,6 +158,14 @@ export async function exportA4PDF(
       pdf.addImage(imgData, 'JPEG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
     }
   } finally {
+    // ★ テキスト要素のoverflowを復元
+    textOuters.forEach((el, i) => {
+      el.style.overflow = originalTextOuterOverflows[i] || '';
+    });
+    textInners.forEach((el, i) => {
+      el.style.overflow = originalTextInnerOverflows[i] || '';
+    });
+
     // ★ POPフレームのoverflowを復元
     popFrames.forEach((frame, i) => {
       frame.style.overflow = originalOverflows[i] || '';
