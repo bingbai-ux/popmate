@@ -290,23 +290,28 @@ function PrintContent() {
               top,
               width,
               height,
+              zIndex: processedElement.zIndex,
               display: 'flex',
               flexDirection: 'column',
               justifyContent,
+              overflow: 'hidden',
             }}
           >
             <div
               style={{
+                fontFamily: processedElement.style.fontFamily,
                 fontSize: `${processedElement.style.fontSize}px`,
                 fontWeight: processedElement.style.fontWeight,
-                fontFamily: processedElement.style.fontFamily,
+                fontStyle: processedElement.style.fontStyle,
                 color: processedElement.style.color,
-                textAlign: processedElement.style.textAlign,
-                lineHeight: `${processedElement.style.lineHeight}%`,
-                letterSpacing: `${processedElement.style.letterSpacing}px`,
                 opacity: processedElement.style.opacity / 100,
-                whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
+                textAlign: processedElement.style.textAlign,
+                letterSpacing: `${processedElement.style.letterSpacing}px`,
+                lineHeight: `${processedElement.style.lineHeight}%`,
+                textDecoration: processedElement.style.textDecoration,
                 writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
+                overflow: 'hidden',
                 // 文字幅（エディタと同じscaleX）
                 transform: processedElement.style.textWidth !== 100 ? `scaleX(${processedElement.style.textWidth / 100})` : undefined,
                 transformOrigin: 'left top',
