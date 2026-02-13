@@ -65,6 +65,36 @@ export function estimateTextCapacity(
 }
 
 /**
+ * プレースホルダーを含むテキストの推定表示文字数を計算
+ * {{price}} → "¥10,000" (約7文字) のように、実際の表示文字数を推定する
+ */
+const PLACEHOLDER_ESTIMATED_LENGTHS: Record<string, number> = {
+  '{{productName}}': 10,
+  '{{productCode}}': 13,
+  '{{price}}': 7,
+  '{{priceNumber}}': 5,
+  '{{taxIncludedPrice}}': 7,
+  '{{taxIncludedPriceNumber}}': 5,
+  '{{description}}': 30,
+  '{{maker}}': 8,
+  '{{taxRate}}': 3,
+  '{{taxRateNumber}}': 2,
+  '{{category}}': 6,
+};
+
+export function estimateRenderedLength(content: string): number {
+  let text = content;
+  for (const [placeholder, length] of Object.entries(PLACEHOLDER_ESTIMATED_LENGTHS)) {
+    text = text.replaceAll(placeholder, 'X'.repeat(length));
+  }
+  return text.length;
+}
+
+export function hasPlaceholders(content: string): boolean {
+  return /\{\{[a-zA-Z]+\}\}/.test(content);
+}
+
+/**
  * 禁則処理を適用したテキストを生成
  * 数字と単位、カタカナ連続語などが途切れないようにする
  * @param text 元のテキスト
