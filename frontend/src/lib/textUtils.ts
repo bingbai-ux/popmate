@@ -35,17 +35,22 @@ export function estimateTextCapacity(
   // 行の高さ
   const lineHeightMm = fontSizeMm * (lineHeightPercent / 100);
 
+  // 利用可能な幅・高さ（上下左右の余白分を差し引く）
+  // テキスト描画では最上部と最下部にフォントサイズの30%程度の余白が生じる
+  const usableHeightMm = Math.max(0, heightMm - fontSizeMm * 0.3);
+  const usableWidthMm = widthMm;
+
   let charsPerLine: number;
   let lines: number;
 
   if (isVertical) {
     // 縦書きの場合
-    charsPerLine = Math.floor(heightMm / charWidthMm);
-    lines = Math.floor(widthMm / lineHeightMm);
+    charsPerLine = Math.floor(usableHeightMm / charWidthMm);
+    lines = Math.floor(usableWidthMm / lineHeightMm);
   } else {
     // 横書きの場合
-    charsPerLine = Math.floor(widthMm / charWidthMm);
-    lines = Math.floor(heightMm / lineHeightMm);
+    charsPerLine = Math.floor(usableWidthMm / charWidthMm);
+    lines = Math.floor(usableHeightMm / lineHeightMm);
   }
 
   // 最低1文字、1行は確保
