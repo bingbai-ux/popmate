@@ -254,152 +254,149 @@ function PrintContent() {
   };
 
   // ==================================================
-  // ポップ内コンテンツのレンダリング（mm単位）
+  // ポップ内コンテンツのレンダリング
+  // ★ PreviewCanvas と同一の 2x px 座標系で描画し CSS scale(0.5) で縮小
+  //    → フォントピクセルサイズ・サブピクセル丸めが完全一致
   // ==================================================
+  const RENDER_SCALE = 2;                                         // PreviewCanvas の BASE_ZOOM と同値
+  const mmToPx = (mm: number) => mm * 3.78 * RENDER_SCALE;       // PreviewCanvas と同一の変換
+
   const renderPopContent = (product: Product) => {
-    // AI要約済みの要素があればそれを使用、なければ通常の置換にフォールバック
     const productKey = product.productId || product.productCode || product.productName;
     const preProcessed = processedElementsMap.get(productKey);
 
-    return (preProcessed || elements).map((element) => {
-      // pre-processedの場合はそのまま使用、なければ同期的に置換
-      const processedElement = preProcessed ? element : replaceElementPlaceholders(element, product, taxSettings);
-      
-      // mm単位で配置
-      const left = `${processedElement.position.x}mm`;
-      const top = `${processedElement.position.y}mm`;
-      const width = `${processedElement.size.width}mm`;
-      const height = `${processedElement.size.height}mm`;
+    return (
+      <div style={{
+        width: mmToPx(templateSize.width),
+        height: mmToPx(templateSize.height),
+        transform: `scale(${1 / RENDER_SCALE})`,
+        transformOrigin: 'top left',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+      }}>
+        {(preProcessed || elements).map((element) => {
+          const processedElement = preProcessed ? element : replaceElementPlaceholders(element, product, taxSettings);
 
-      if (processedElement.type === 'text') {
-        // 禁則処理を適用（数字+単位、カタカナ連続語の途切れ防止）
-        const processedContent = applyKinsoku(processedElement.content);
+          const left = mmToPx(processedElement.position.x);
+          const top = mmToPx(processedElement.position.y);
+          const width = mmToPx(processedElement.size.width);
+          const height = mmToPx(processedElement.size.height);
 
-        // 垂直配置（エディタと同じflexbox方式）
-        const verticalAlign = processedElement.style.verticalAlign || 'top';
-        const justifyContent = verticalAlign === 'top' ? 'flex-start'
-          : verticalAlign === 'bottom' ? 'flex-end'
-          : 'center';
+          if (processedElement.type === 'text') {
+            const processedContent = applyKinsoku(processedElement.content);
+            const verticalAlign = processedElement.style.verticalAlign || 'top';
+            const justifyContent = verticalAlign === 'top' ? 'flex-start'
+              : verticalAlign === 'bottom' ? 'flex-end'
+              : 'center';
 
-        return (
-          <div
-            key={processedElement.id}
-            className="pop-text-outer"
-            style={{
-              position: 'absolute',
-              left,
-              top,
-              width,
-              height,
-              zIndex: processedElement.zIndex,
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent,
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              className="pop-text-inner"
-              style={{
-                fontFamily: processedElement.style.fontFamily,
-                fontSize: `${processedElement.style.fontSize}px`,
-                fontWeight: processedElement.style.fontWeight,
-                fontStyle: processedElement.style.fontStyle,
-                color: processedElement.style.color,
-                opacity: processedElement.style.opacity / 100,
-                textAlign: processedElement.style.textAlign,
-                letterSpacing: `${processedElement.style.letterSpacing}px`,
-                lineHeight: `${processedElement.style.lineHeight}%`,
-                textDecoration: processedElement.style.textDecoration,
-                writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
-                whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
-                overflow: 'hidden',
-                // 文字幅（エディタと同じscaleX）
-                transform: processedElement.style.textWidth !== 100 ? `scaleX(${processedElement.style.textWidth / 100})` : undefined,
-                transformOrigin: 'left top',
-              }}
-            >
-              {processedContent}
-            </div>
-          </div>
-        );
-      }
+            return (
+              <div
+                key={processedElement.id}
+                style={{
+                  position: 'absolute',
+                  left, top, width, height,
+                  zIndex: processedElement.zIndex,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent,
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: processedElement.style.fontFamily,
+                    fontSize: processedElement.style.fontSize * RENDER_SCALE,
+                    fontWeight: processedElement.style.fontWeight,
+                    fontStyle: processedElement.style.fontStyle,
+                    color: processedElement.style.color,
+                    opacity: processedElement.style.opacity / 100,
+                    textAlign: processedElement.style.textAlign,
+                    letterSpacing: processedElement.style.letterSpacing * RENDER_SCALE,
+                    lineHeight: `${processedElement.style.lineHeight}%`,
+                    textDecoration: processedElement.style.textDecoration,
+                    writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                    whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
+                    overflow: 'hidden',
+                    transform: processedElement.style.textWidth !== 100 ? `scaleX(${processedElement.style.textWidth / 100})` : undefined,
+                    transformOrigin: 'left top',
+                  }}
+                >
+                  {processedContent}
+                </div>
+              </div>
+            );
+          }
 
-      if (processedElement.type === 'shape') {
-        const widthMm = processedElement.size.width;
-        const heightMm = processedElement.size.height;
-        return (
-          <div
-            key={processedElement.id}
-            style={{
-              position: 'absolute',
-              left,
-              top,
-              width,
-              height,
-              zIndex: processedElement.zIndex,
-            }}
-          >
-            <svg width="100%" height="100%" viewBox={`0 0 ${widthMm} ${heightMm}`} preserveAspectRatio="none">
-              {processedElement.shapeType === 'rectangle' && (
-                <rect
-                  width={widthMm}
-                  height={heightMm}
-                  fill={processedElement.style.fill}
-                  fillOpacity={processedElement.style.fillOpacity / 100}
-                  stroke={processedElement.style.stroke}
-                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
-                />
-              )}
-              {processedElement.shapeType === 'roundedRect' && (
-                <rect
-                  width={widthMm}
-                  height={heightMm}
-                  rx={(processedElement.style.cornerRadius || 5) * 0.264583}
-                  fill={processedElement.style.fill}
-                  fillOpacity={processedElement.style.fillOpacity / 100}
-                  stroke={processedElement.style.stroke}
-                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
-                />
-              )}
-              {processedElement.shapeType === 'circle' && (
-                <ellipse
-                  cx={widthMm / 2}
-                  cy={heightMm / 2}
-                  rx={widthMm / 2}
-                  ry={heightMm / 2}
-                  fill={processedElement.style.fill}
-                  fillOpacity={processedElement.style.fillOpacity / 100}
-                  stroke={processedElement.style.stroke}
-                  strokeWidth={processedElement.style.strokeWidth * 0.264583}
-                />
-              )}
-            </svg>
-          </div>
-        );
-      }
+          if (processedElement.type === 'shape') {
+            return (
+              <div
+                key={processedElement.id}
+                style={{
+                  position: 'absolute',
+                  left, top, width, height,
+                  zIndex: processedElement.zIndex,
+                }}
+              >
+                <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+                  {processedElement.shapeType === 'rectangle' && (
+                    <rect
+                      width={width}
+                      height={height}
+                      fill={processedElement.style.fill}
+                      fillOpacity={processedElement.style.fillOpacity / 100}
+                      stroke={processedElement.style.stroke}
+                      strokeWidth={processedElement.style.strokeWidth * RENDER_SCALE}
+                    />
+                  )}
+                  {processedElement.shapeType === 'roundedRect' && (
+                    <rect
+                      width={width}
+                      height={height}
+                      rx={(processedElement.style.cornerRadius || 5) * RENDER_SCALE}
+                      fill={processedElement.style.fill}
+                      fillOpacity={processedElement.style.fillOpacity / 100}
+                      stroke={processedElement.style.stroke}
+                      strokeWidth={processedElement.style.strokeWidth * RENDER_SCALE}
+                    />
+                  )}
+                  {processedElement.shapeType === 'circle' && (
+                    <ellipse
+                      cx={width / 2}
+                      cy={height / 2}
+                      rx={width / 2}
+                      ry={height / 2}
+                      fill={processedElement.style.fill}
+                      fillOpacity={processedElement.style.fillOpacity / 100}
+                      stroke={processedElement.style.stroke}
+                      strokeWidth={processedElement.style.strokeWidth * RENDER_SCALE}
+                    />
+                  )}
+                </svg>
+              </div>
+            );
+          }
 
-      if (processedElement.type === 'image') {
-        return (
-          <img
-            key={processedElement.id}
-            src={processedElement.src}
-            alt={processedElement.alt}
-            style={{
-              position: 'absolute',
-              left,
-              top,
-              width,
-              height,
-              objectFit: 'contain',
-              opacity: processedElement.opacity / 100,
-            }}
-          />
-        );
-      }
+          if (processedElement.type === 'image') {
+            return (
+              <img
+                key={processedElement.id}
+                src={processedElement.src}
+                alt={processedElement.alt}
+                style={{
+                  position: 'absolute',
+                  left, top, width, height,
+                  objectFit: 'contain',
+                  opacity: processedElement.opacity / 100,
+                }}
+              />
+            );
+          }
 
-      return null;
-    });
+          return null;
+        })}
+      </div>
+    );
   };
 
   // ローディング中
