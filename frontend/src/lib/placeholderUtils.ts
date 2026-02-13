@@ -172,35 +172,55 @@ export async function replaceElementPlaceholdersWithSummarize(
 
     // textWidth (scaleX) を考慮: 文字幅が広がれば容量は減る
     const textWidthRatio = (textElement.style.textWidth || 100) / 100;
-    // 安全マージン10%を加味（フォントレンダリング差異の吸収）
-    const effectiveChars = Math.floor(capacity.chars / textWidthRatio * 0.9);
+    // 安全マージン35%を加味（フォントレンダリング差異、行末余白、禁則処理の吸収）
+    const effectiveChars = Math.floor(capacity.chars / textWidthRatio * 0.65);
+
+    console.log('[AI Summarize] capacity check:', {
+      boxW: textElement.size.width, boxH: textElement.size.height,
+      fontSize: textElement.style.fontSize, lineHeight: textElement.style.lineHeight,
+      rawCapacity: capacity.chars, effectiveChars,
+      contentLength: textElement.content.replace(/\r?\n/g, '').length,
+      hasDescription,
+    });
 
     // 改行を除外して文字数をカウント
     const contentWithoutNewlines = textElement.content.replace(/\r?\n/g, '');
 
     // テキストが収まらない場合、AI省略を適用
-    if (contentWithoutNewlines.length > effectiveChars) {
+    // description含む要素は常にチェック（推定が外れるケースへの対策）
+    const needsSummarize = contentWithoutNewlines.length > effectiveChars;
+    const descriptionNeedsSummarize = hasDescription && product.description &&
+      product.description.length > 30 && contentWithoutNewlines.length > effectiveChars * 0.7;
+
+    if (needsSummarize || descriptionNeedsSummarize) {
+      const targetChars = effectiveChars;
+
       if (hasDescription && product.description) {
         // description部分のみ要約
         const descriptionWithoutNewlines = product.description.replace(/\r?\n/g, '');
-        const cacheKey = `${product.productId || product.productCode}-desc-${effectiveChars}`;
+        // description以外のテキスト部分の文字数を計算し、差し引く
+        const otherTextLength = contentWithoutNewlines.length - descriptionWithoutNewlines.length;
+        const descriptionTargetChars = Math.max(10, targetChars - otherTextLength);
+        const cacheKey = `${product.productId || product.productCode}-desc-${descriptionTargetChars}`;
+
+        console.log('[AI Summarize] description target:', { descriptionTargetChars, otherTextLength, descLen: descriptionWithoutNewlines.length });
 
         if (summaryCache.has(cacheKey)) {
           const cachedSummary = summaryCache.get(cacheKey)!;
           textElement.content = textElement.content.replace(product.description, cachedSummary);
         } else {
-          const summarized = await summarizeText(descriptionWithoutNewlines, effectiveChars);
+          const summarized = await summarizeText(descriptionWithoutNewlines, descriptionTargetChars);
           summaryCache.set(cacheKey, summarized);
           textElement.content = textElement.content.replace(product.description, summarized);
         }
       } else {
         // description以外（productName等）が溢れた場合、テキスト全体を要約
-        const cacheKey = `${product.productId || product.productCode}-all-${effectiveChars}`;
+        const cacheKey = `${product.productId || product.productCode}-all-${targetChars}`;
 
         if (summaryCache.has(cacheKey)) {
           textElement.content = summaryCache.get(cacheKey)!;
         } else {
-          const summarized = await summarizeText(contentWithoutNewlines, effectiveChars);
+          const summarized = await summarizeText(contentWithoutNewlines, targetChars);
           summaryCache.set(cacheKey, summarized);
           textElement.content = summarized;
         }

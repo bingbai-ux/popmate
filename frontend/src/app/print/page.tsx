@@ -293,7 +293,6 @@ function PrintContent() {
               display: 'flex',
               flexDirection: 'column',
               justifyContent,
-              overflow: 'hidden',
             }}
           >
             <div
@@ -308,7 +307,6 @@ function PrintContent() {
                 opacity: processedElement.style.opacity / 100,
                 whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
                 writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
-                overflow: 'hidden',
                 // 文字幅（エディタと同じscaleX）
                 transform: processedElement.style.textWidth !== 100 ? `scaleX(${processedElement.style.textWidth / 100})` : undefined,
                 transformOrigin: 'left top',
