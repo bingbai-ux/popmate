@@ -160,35 +160,49 @@ export async function replaceElementPlaceholdersWithSummarize(
     // 通常のプレースホルダー置換
     textElement.content = replacePlaceholders(textElement.content, product, taxSettings);
 
-    // 商品説明が含まれている場合、テキストボックスに収まるか確認
-    if (hasDescription && product.description) {
-      const capacity = estimateTextCapacity(
-        textElement.size.width,
-        textElement.size.height,
-        textElement.style.fontSize,
-        textElement.style.lineHeight,
-        textElement.style.letterSpacing,
-        textElement.style.writingMode === 'vertical'
-      );
+    // テキストボックスの容量を推定
+    const capacity = estimateTextCapacity(
+      textElement.size.width,
+      textElement.size.height,
+      textElement.style.fontSize,
+      textElement.style.lineHeight,
+      textElement.style.letterSpacing,
+      textElement.style.writingMode === 'vertical'
+    );
 
-      // 改行を除外して文字数をカウント（改行は文字数に含めない）
-      const contentWithoutNewlines = textElement.content.replace(/\r?\n/g, '');
-      const descriptionWithoutNewlines = product.description.replace(/\r?\n/g, '');
+    // textWidth (scaleX) を考慮: 文字幅が広がれば容量は減る
+    const textWidthRatio = (textElement.style.textWidth || 100) / 100;
+    // 安全マージン10%を加味（フォントレンダリング差異の吸収）
+    const effectiveChars = Math.floor(capacity.chars / textWidthRatio * 0.9);
 
-      // テキストが収まらない場合、AI省略を適用
-      if (contentWithoutNewlines.length > capacity.chars) {
-        // キャッシュキー: 商品ID + 最大文字数
-        const cacheKey = `${product.productId || product.productCode}-${capacity.chars}`;
+    // 改行を除外して文字数をカウント
+    const contentWithoutNewlines = textElement.content.replace(/\r?\n/g, '');
+
+    // テキストが収まらない場合、AI省略を適用
+    if (contentWithoutNewlines.length > effectiveChars) {
+      if (hasDescription && product.description) {
+        // description部分のみ要約
+        const descriptionWithoutNewlines = product.description.replace(/\r?\n/g, '');
+        const cacheKey = `${product.productId || product.productCode}-desc-${effectiveChars}`;
 
         if (summaryCache.has(cacheKey)) {
-          // キャッシュから取得
           const cachedSummary = summaryCache.get(cacheKey)!;
           textElement.content = textElement.content.replace(product.description, cachedSummary);
         } else {
-          // AI省略を実行（改行を削除したテキストを渡す）
-          const summarized = await summarizeText(descriptionWithoutNewlines, capacity.chars);
+          const summarized = await summarizeText(descriptionWithoutNewlines, effectiveChars);
           summaryCache.set(cacheKey, summarized);
           textElement.content = textElement.content.replace(product.description, summarized);
+        }
+      } else {
+        // description以外（productName等）が溢れた場合、テキスト全体を要約
+        const cacheKey = `${product.productId || product.productCode}-all-${effectiveChars}`;
+
+        if (summaryCache.has(cacheKey)) {
+          textElement.content = summaryCache.get(cacheKey)!;
+        } else {
+          const summarized = await summarizeText(contentWithoutNewlines, effectiveChars);
+          summaryCache.set(cacheKey, summarized);
+          textElement.content = summarized;
         }
       }
     }
