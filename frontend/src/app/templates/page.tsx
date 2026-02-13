@@ -33,10 +33,15 @@ export default function TemplatesPage() {
 
       // 保存テンプレートもリモートから同期
       try {
-        await syncService.pullFromRemote();
-        const refreshed = await getSavedTemplates();
-        setSavedTemplates(refreshed);
-      } catch {
+        const imported = await syncService.pullFromRemote();
+        console.log('[templates] ★ pull imported:', imported, 'records');
+        if (imported > 0) {
+          const refreshed = await getSavedTemplates();
+          console.log('[templates] ★ refreshed saved templates:', refreshed.length);
+          setSavedTemplates(refreshed);
+        }
+      } catch (syncError) {
+        console.error('[templates] ★ remote sync failed:', syncError);
         // リモート同期失敗はローカルデータで継続
       }
     } catch {
