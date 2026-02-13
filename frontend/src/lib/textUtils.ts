@@ -8,26 +8,26 @@
  * テキストボックスに収まる推定文字数を計算
  * @param widthMm ボックスの幅（mm）
  * @param heightMm ボックスの高さ（mm）
- * @param fontSizePt フォントサイズ（pt）
+ * @param fontSizePx フォントサイズ（px）
  * @param lineHeightPercent 行間（%）
- * @param letterSpacingPt 字間（pt）
+ * @param letterSpacingPx 字間（px）
  * @param isVertical 縦書きかどうか
  * @returns 推定文字数と行数
  */
 export function estimateTextCapacity(
   widthMm: number,
   heightMm: number,
-  fontSizePt: number,
+  fontSizePx: number,
   lineHeightPercent: number = 120,
-  letterSpacingPt: number = 0,
+  letterSpacingPx: number = 0,
   isVertical: boolean = false
 ): { chars: number; lines: number; charsPerLine: number } {
-  // 単位変換: 1pt ≒ 0.353mm, 1mm ≒ 2.83pt
-  const ptToMm = 0.353;
+  // 単位変換: 1px = 1/3.78 mm ≒ 0.2646mm
+  const pxToMm = 1 / 3.78;
 
   // フォントサイズをmmに変換
-  const fontSizeMm = fontSizePt * ptToMm;
-  const letterSpacingMm = letterSpacingPt * ptToMm;
+  const fontSizeMm = fontSizePx * pxToMm;
+  const letterSpacingMm = letterSpacingPx * pxToMm;
 
   // 実際の文字幅（日本語は等幅と仮定）
   const charWidthMm = fontSizeMm + letterSpacingMm;

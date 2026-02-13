@@ -24,7 +24,7 @@ import {
   type LayoutResult,
   type PaperSize,
 } from '@/lib/printLayout';
-import { replaceElementPlaceholders } from '@/lib/placeholderUtils';
+import { replaceElementPlaceholders, replaceAllElementsWithSummarize } from '@/lib/placeholderUtils';
 import { applyKinsoku } from '@/lib/textUtils';
 
 function PrintContent() {
@@ -59,6 +59,10 @@ function PrintContent() {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [currentProjectName, setCurrentProjectName] = useState('');
   const [currentSaveType, setCurrentSaveType] = useState<SaveType | undefined>(undefined);
+
+  // AI要約済み要素のキャッシュ（商品ID → 処理済み要素配列）
+  const [processedElementsMap, setProcessedElementsMap] = useState<Map<string, EditorElement[]>>(new Map());
+  const [isProcessingElements, setIsProcessingElements] = useState(false);
 
   // プレビュースケール
   const [previewScale, setPreviewScale] = useState(0.55);
@@ -97,6 +101,38 @@ function PrintContent() {
 
     setIsLoaded(true);
   }, [templateId, searchParams]);
+
+  // --- AI要約付きプレースホルダー置換 ---
+  useEffect(() => {
+    if (!isLoaded || products.length === 0 || elements.length === 0) return;
+
+    let isCancelled = false;
+    setIsProcessingElements(true);
+
+    const processAll = async () => {
+      const newMap = new Map<string, EditorElement[]>();
+      for (const product of products) {
+        if (isCancelled) return;
+        const key = product.productId || product.productCode || product.productName;
+        try {
+          const processed = await replaceAllElementsWithSummarize(elements, product, taxSettings);
+          newMap.set(key, processed);
+        } catch (error) {
+          console.error('[print] AI要約処理エラー:', error);
+          // フォールバック: 通常の置換
+          const fallback = elements.map(el => replaceElementPlaceholders(el, product, taxSettings));
+          newMap.set(key, fallback);
+        }
+      }
+      if (!isCancelled) {
+        setProcessedElementsMap(newMap);
+        setIsProcessingElements(false);
+      }
+    };
+
+    processAll();
+    return () => { isCancelled = true; };
+  }, [isLoaded, products, elements, taxSettings]);
 
   // --- プレビュースケールの動的計算 ---
   useEffect(() => {
@@ -221,8 +257,13 @@ function PrintContent() {
   // ポップ内コンテンツのレンダリング（mm単位）
   // ==================================================
   const renderPopContent = (product: Product) => {
-    return elements.map((element) => {
-      const processedElement = replaceElementPlaceholders(element, product, taxSettings);
+    // AI要約済みの要素があればそれを使用、なければ通常の置換にフォールバック
+    const productKey = product.productId || product.productCode || product.productName;
+    const preProcessed = processedElementsMap.get(productKey);
+
+    return (preProcessed || elements).map((element) => {
+      // pre-processedの場合はそのまま使用、なければ同期的に置換
+      const processedElement = preProcessed ? element : replaceElementPlaceholders(element, product, taxSettings);
       
       // mm単位で配置
       const left = `${processedElement.position.x}mm`;
@@ -396,6 +437,17 @@ function PrintContent() {
 
           {/* === 左側: A4プレビュー === */}
           <div className="flex-1" ref={previewContainerRef}>
+
+            {/* AI処理中インジケーター */}
+            {isProcessingElements && (
+              <div className="flex items-center justify-center gap-2 py-3 text-sm text-gray-500 no-print">
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>テキストを最適化中...</span>
+              </div>
+            )}
 
             {/* A4ページ群 — このdiv全体が画面・印刷で共用 */}
             <div
