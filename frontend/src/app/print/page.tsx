@@ -234,6 +234,12 @@ function PrintContent() {
         // 禁則処理を適用（数字+単位、カタカナ連続語の途切れ防止）
         const processedContent = applyKinsoku(processedElement.content);
 
+        // 垂直配置（エディタと同じflexbox方式）
+        const verticalAlign = processedElement.style.verticalAlign || 'top';
+        const justifyContent = verticalAlign === 'top' ? 'flex-start'
+          : verticalAlign === 'bottom' ? 'flex-end'
+          : 'center';
+
         return (
           <div
             key={processedElement.id}
@@ -243,26 +249,32 @@ function PrintContent() {
               top,
               width,
               height,
-              fontSize: `${processedElement.style.fontSize}px`,
-              fontWeight: processedElement.style.fontWeight,
-              fontFamily: processedElement.style.fontFamily,
-              color: processedElement.style.color,
-              textAlign: processedElement.style.textAlign,
-              lineHeight: `${processedElement.style.lineHeight}%`,
-              letterSpacing: `${processedElement.style.letterSpacing}px`,
-              opacity: processedElement.style.opacity / 100,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent,
               overflow: 'hidden',
-              whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
-              writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
-              // 禁則処理: 日本語の単語を途中で切らない
-              wordBreak: 'keep-all',
-              // 単語が長すぎる場合のみ折り返し
-              overflowWrap: 'anywhere',
-              // ハイフネーション無効（日本語には不要）
-              hyphens: 'none',
             }}
           >
-            {processedContent}
+            <div
+              style={{
+                fontSize: `${processedElement.style.fontSize}px`,
+                fontWeight: processedElement.style.fontWeight,
+                fontFamily: processedElement.style.fontFamily,
+                color: processedElement.style.color,
+                textAlign: processedElement.style.textAlign,
+                lineHeight: `${processedElement.style.lineHeight}%`,
+                letterSpacing: `${processedElement.style.letterSpacing}px`,
+                opacity: processedElement.style.opacity / 100,
+                whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
+                writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                overflow: 'hidden',
+                // 文字幅（エディタと同じscaleX）
+                transform: processedElement.style.textWidth !== 100 ? `scaleX(${processedElement.style.textWidth / 100})` : undefined,
+                transformOrigin: 'left top',
+              }}
+            >
+              {processedContent}
+            </div>
           </div>
         );
       }

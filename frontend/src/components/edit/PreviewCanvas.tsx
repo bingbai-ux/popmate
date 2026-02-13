@@ -97,9 +97,16 @@ export default function PreviewCanvas({
     const height = mmToPx(element.size.height);
 
     switch (element.type) {
-      case 'text':
+      case 'text': {
         // 禁則処理を適用
         const processedContent = applyKinsoku(element.content);
+
+        // 垂直配置（エディタと同じflexbox方式）
+        const verticalAlign = element.style.verticalAlign || 'top';
+        const justifyContent = verticalAlign === 'top' ? 'flex-start'
+          : verticalAlign === 'bottom' ? 'flex-end'
+          : 'center';
+
         return (
           <div
             key={element.id}
@@ -107,26 +114,37 @@ export default function PreviewCanvas({
               position: 'absolute',
               left, top, width, height,
               zIndex: element.zIndex,
-              fontFamily: element.style.fontFamily,
-              fontSize: element.style.fontSize * BASE_ZOOM,
-              fontWeight: element.style.fontWeight,
-              fontStyle: element.style.fontStyle,
-              color: element.style.color,
-              opacity: element.style.opacity / 100,
-              textAlign: element.style.textAlign,
-              letterSpacing: element.style.letterSpacing,
-              lineHeight: `${element.style.lineHeight}%`,
-              textDecoration: element.style.textDecoration,
-              writingMode: element.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
-              whiteSpace: element.style.autoWrap ? 'pre-wrap' : 'nowrap',
-              wordBreak: 'keep-all',
-              overflowWrap: 'anywhere',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent,
               overflow: 'hidden',
             }}
           >
-            {processedContent}
+            <div
+              style={{
+                fontFamily: element.style.fontFamily,
+                fontSize: element.style.fontSize * BASE_ZOOM,
+                fontWeight: element.style.fontWeight,
+                fontStyle: element.style.fontStyle,
+                color: element.style.color,
+                opacity: element.style.opacity / 100,
+                textAlign: element.style.textAlign,
+                letterSpacing: element.style.letterSpacing * BASE_ZOOM,
+                lineHeight: `${element.style.lineHeight}%`,
+                textDecoration: element.style.textDecoration,
+                writingMode: element.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
+                whiteSpace: element.style.autoWrap ? 'pre-wrap' : 'nowrap',
+                overflow: 'hidden',
+                // 文字幅（エディタと同じscaleX）
+                transform: element.style.textWidth !== 100 ? `scaleX(${element.style.textWidth / 100})` : undefined,
+                transformOrigin: 'left top',
+              }}
+            >
+              {processedContent}
+            </div>
           </div>
         );
+      }
 
       case 'shape':
         return (
