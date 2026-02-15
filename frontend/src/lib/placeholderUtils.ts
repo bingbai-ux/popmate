@@ -172,9 +172,11 @@ export async function replaceElementPlaceholdersWithSummarize(
 
     // textWidth (scaleX) を考慮: 文字幅が広がれば容量は減る
     const textWidthRatio = (textElement.style.textWidth || 100) / 100;
-    // 安全マージン15%を加味（フォントレンダリング差異、行末余白、禁則処理の吸収）
-    // 注: 以前は0.65（35%マージン）だったが、要約が短すぎる原因になっていたため緩和
-    const effectiveChars = Math.floor(capacity.chars / textWidthRatio * 0.85);
+    // 安全マージン5%を加味（フォントレンダリング差異の吸収のみ）
+    // 注: 以前は0.65（35%マージン）→0.85→0.95と段階的に緩和。
+    // 実測で元テキストがボックスに収まっている場合でもAI要約が発動していたため、
+    // マージンを最小限に抑える。はみ出しはCSS overflow:hiddenで吸収される。
+    const effectiveChars = Math.floor(capacity.chars / textWidthRatio * 0.95);
 
     console.log('[AI Summarize] capacity check:', {
       boxW: textElement.size.width, boxH: textElement.size.height,
@@ -187,13 +189,13 @@ export async function replaceElementPlaceholdersWithSummarize(
     // 改行を除外して文字数をカウント
     const contentWithoutNewlines = textElement.content.replace(/\r?\n/g, '');
 
-    // テキストが収まらない場合、AI省略を適用
-    // description含む要素は常にチェック（推定が外れるケースへの対策）
+    // テキストが収まらない場合のみAI省略を適用
+    // 注: 以前は effectiveChars * 0.7 で早期トリガーしていたが、
+    // 元テキストが収まるのに不要な要約が発動する原因だったため削除。
+    // effectiveChars自体に5%マージンが含まれているので二重マージンは不要。
     const needsSummarize = contentWithoutNewlines.length > effectiveChars;
-    const descriptionNeedsSummarize = hasDescription && product.description &&
-      product.description.length > 30 && contentWithoutNewlines.length > effectiveChars * 0.7;
 
-    if (needsSummarize || descriptionNeedsSummarize) {
+    if (needsSummarize) {
       const targetChars = effectiveChars;
 
       if (hasDescription && product.description) {
