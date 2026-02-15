@@ -172,8 +172,9 @@ export async function replaceElementPlaceholdersWithSummarize(
 
     // textWidth (scaleX) を考慮: 文字幅が広がれば容量は減る
     const textWidthRatio = (textElement.style.textWidth || 100) / 100;
-    // 安全マージン35%を加味（フォントレンダリング差異、行末余白、禁則処理の吸収）
-    const effectiveChars = Math.floor(capacity.chars / textWidthRatio * 0.65);
+    // 安全マージン15%を加味（フォントレンダリング差異、行末余白、禁則処理の吸収）
+    // 注: 以前は0.65（35%マージン）だったが、要約が短すぎる原因になっていたため緩和
+    const effectiveChars = Math.floor(capacity.chars / textWidthRatio * 0.85);
 
     console.log('[AI Summarize] capacity check:', {
       boxW: textElement.size.width, boxH: textElement.size.height,
