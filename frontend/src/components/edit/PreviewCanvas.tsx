@@ -144,6 +144,8 @@ export default function PreviewCanvas({
                 textDecoration: element.style.textDecoration,
                 writingMode: element.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
                 whiteSpace: element.style.autoWrap ? 'pre-wrap' : 'nowrap',
+                wordBreak: 'keep-all',
+                overflowWrap: 'break-word',
                 overflow: 'hidden',
                 // 文字幅（エディタと同じscaleX）
                 transform: element.style.textWidth !== 100 ? `scaleX(${element.style.textWidth / 100})` : undefined,

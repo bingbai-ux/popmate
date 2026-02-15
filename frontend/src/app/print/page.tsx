@@ -337,6 +337,8 @@ function PrintContent() {
                     textDecoration: processedElement.style.textDecoration,
                     writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
                     whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
+                    wordBreak: 'keep-all',
+                    overflowWrap: 'break-word',
                     transform: processedElement.style.textWidth !== 100 ? `scaleX(${processedElement.style.textWidth / 100})` : undefined,
                     transformOrigin: 'left top',
                   }}
