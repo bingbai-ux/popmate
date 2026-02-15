@@ -211,8 +211,8 @@ export default function TextElement({
     transform: element.style.textWidth !== 100 ? `scaleX(${element.style.textWidth / 100})` : undefined,
     transformOrigin: 'left top',
     whiteSpace: element.style.autoWrap ? 'pre-wrap' : 'nowrap',
-    wordBreak: 'keep-all',
-    overflowWrap: 'break-word',
+    // 商品説明テキストには禁則処理CSSを適用しない（文章が収まらなくなるため）
+    ...(element.content.includes('{{description}}') ? {} : { wordBreak: 'keep-all' as const, overflowWrap: 'break-word' as const }),
     overflow: 'hidden',
   };
 

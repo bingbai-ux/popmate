@@ -305,7 +305,13 @@ function PrintContent() {
           const height = mmToPx(processedElement.size.height);
 
           if (processedElement.type === 'text') {
-            const processedContent = applyKinsoku(processedElement.content);
+            // 商品説明テキストかどうか判定（元テンプレートに {{description}} を含むか）
+            const originalElement = elements.find(el => el.id === processedElement.id);
+            const isDescription = originalElement?.type === 'text'
+              && (originalElement as { content?: string }).content?.includes('{{description}}');
+
+            // 禁則処理を適用（商品説明には適用しない — 文章が収まらなくなるため）
+            const processedContent = isDescription ? processedElement.content : applyKinsoku(processedElement.content);
             const verticalAlign = processedElement.style.verticalAlign || 'top';
             const justifyContent = verticalAlign === 'top' ? 'flex-start'
               : verticalAlign === 'bottom' ? 'flex-end'
@@ -337,8 +343,7 @@ function PrintContent() {
                     textDecoration: processedElement.style.textDecoration,
                     writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
                     whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
-                    wordBreak: 'keep-all',
-                    overflowWrap: 'break-word',
+                    ...(isDescription ? {} : { wordBreak: 'keep-all' as const, overflowWrap: 'break-word' as const }),
                     transform: processedElement.style.textWidth !== 100 ? `scaleX(${processedElement.style.textWidth / 100})` : undefined,
                     transformOrigin: 'left top',
                   }}

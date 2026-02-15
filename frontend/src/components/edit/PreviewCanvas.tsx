@@ -108,8 +108,13 @@ export default function PreviewCanvas({
 
     switch (element.type) {
       case 'text': {
-        // 禁則処理を適用
-        const processedContent = applyKinsoku(element.content);
+        // 商品説明テキストかどうか判定（元テンプレートに {{description}} を含むか）
+        const originalElement = elements.find(el => el.id === element.id);
+        const isDescription = originalElement?.type === 'text'
+          && (originalElement as { content?: string }).content?.includes('{{description}}');
+
+        // 禁則処理を適用（商品説明には適用しない — 文章が収まらなくなるため）
+        const processedContent = isDescription ? element.content : applyKinsoku(element.content);
 
         // 垂直配置（エディタと同じflexbox方式）
         const verticalAlign = element.style.verticalAlign || 'top';
@@ -144,8 +149,7 @@ export default function PreviewCanvas({
                 textDecoration: element.style.textDecoration,
                 writingMode: element.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
                 whiteSpace: element.style.autoWrap ? 'pre-wrap' : 'nowrap',
-                wordBreak: 'keep-all',
-                overflowWrap: 'break-word',
+                ...(isDescription ? {} : { wordBreak: 'keep-all' as const, overflowWrap: 'break-word' as const }),
                 overflow: 'hidden',
                 // 文字幅（エディタと同じscaleX）
                 transform: element.style.textWidth !== 100 ? `scaleX(${element.style.textWidth / 100})` : undefined,
