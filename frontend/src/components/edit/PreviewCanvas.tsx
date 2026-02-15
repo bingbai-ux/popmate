@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { EditorElement, TemplateConfig, TaxSettings } from '@/types/editor';
 import { Product } from '@/types/product';
-import { replaceAllElementsWithSummarize } from '@/lib/placeholderUtils';
+import { replaceAllElementsWithSummarize, replaceElementPlaceholders } from '@/lib/placeholderUtils';
 import { applyKinsoku } from '@/lib/textUtils';
 
 interface PreviewCanvasProps {
@@ -12,6 +12,7 @@ interface PreviewCanvasProps {
   product: Product | null;
   taxSettings: TaxSettings;
   zoom?: number;
+  summarizeEnabled?: boolean;
 }
 
 /**
@@ -25,6 +26,7 @@ export default function PreviewCanvas({
   elements,
   product,
   taxSettings,
+  summarizeEnabled = true,
 }: PreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [cssScale, setCssScale] = useState(1);
@@ -60,10 +62,18 @@ export default function PreviewCanvas({
     return () => resizeObserver.disconnect();
   }, [popWidthPx, popHeightPx]);
 
-  // プレースホルダーを置換（AI省略付き）
+  // プレースホルダーを置換（summarizeEnabled に応じてAI省略の有無を切替）
   useEffect(() => {
     if (!product) {
       setProcessedElements(elements);
+      return;
+    }
+
+    if (!summarizeEnabled) {
+      // AI要約OFF → 同期的にプレースホルダーのみ置換
+      const replaced = elements.map(el => replaceElementPlaceholders(el, product, taxSettings));
+      setProcessedElements(replaced);
+      setIsProcessing(false);
       return;
     }
 
@@ -88,7 +98,7 @@ export default function PreviewCanvas({
     return () => {
       isCancelled = true;
     };
-  }, [elements, product, taxSettings]);
+  }, [elements, product, taxSettings, summarizeEnabled]);
 
   const renderElement = (element: EditorElement) => {
     const left = mmToPx(element.position.x);
