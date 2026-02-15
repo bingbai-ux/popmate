@@ -64,6 +64,9 @@ function PrintContent() {
   const [processedElementsMap, setProcessedElementsMap] = useState<Map<string, EditorElement[]>>(new Map());
   const [isProcessingElements, setIsProcessingElements] = useState(false);
 
+  // AI要約フラグ（商品インデックスごと）
+  const [summarizeFlags, setSummarizeFlags] = useState<boolean[]>([]);
+
   // プレビュースケール
   const [previewScale, setPreviewScale] = useState(0.55);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -93,6 +96,16 @@ function PrintContent() {
       console.error('[print] 税設定の復元に失敗:', e);
     }
 
+    // AI要約フラグを復元
+    try {
+      const savedFlags = sessionStorage.getItem('summarizeFlags');
+      if (savedFlags) {
+        setSummarizeFlags(JSON.parse(savedFlags));
+      }
+    } catch (e) {
+      console.error('[print] AI要約フラグの復元に失敗:', e);
+    }
+
     // URLパラメータからプロジェクト情報を復元（保存データ再編集時）
     const pid = searchParams.get('projectId');
     const pname = searchParams.get('projectName');
@@ -111,17 +124,25 @@ function PrintContent() {
 
     const processAll = async () => {
       const newMap = new Map<string, EditorElement[]>();
-      for (const product of products) {
+      for (let i = 0; i < products.length; i++) {
         if (isCancelled) return;
+        const product = products[i];
         const key = product.productId || product.productCode || product.productName;
-        try {
-          const processed = await replaceAllElementsWithSummarize(elements, product, taxSettings);
-          newMap.set(key, processed);
-        } catch (error) {
-          console.error('[print] AI要約処理エラー:', error);
-          // フォールバック: 通常の置換
-          const fallback = elements.map(el => replaceElementPlaceholders(el, product, taxSettings));
-          newMap.set(key, fallback);
+        const shouldSummarize = summarizeFlags[i] ?? true;
+
+        if (shouldSummarize) {
+          try {
+            const processed = await replaceAllElementsWithSummarize(elements, product, taxSettings);
+            newMap.set(key, processed);
+          } catch (error) {
+            console.error('[print] AI要約処理エラー:', error);
+            const fallback = elements.map(el => replaceElementPlaceholders(el, product, taxSettings));
+            newMap.set(key, fallback);
+          }
+        } else {
+          // AI要約OFF → 通常の置換のみ
+          const replaced = elements.map(el => replaceElementPlaceholders(el, product, taxSettings));
+          newMap.set(key, replaced);
         }
       }
       if (!isCancelled) {
@@ -132,7 +153,7 @@ function PrintContent() {
 
     processAll();
     return () => { isCancelled = true; };
-  }, [isLoaded, products, elements, taxSettings]);
+  }, [isLoaded, products, elements, taxSettings, summarizeFlags]);
 
   // --- プレビュースケールの動的計算 ---
   useEffect(() => {

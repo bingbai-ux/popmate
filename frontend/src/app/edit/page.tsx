@@ -39,8 +39,10 @@ function EditContent() {
   const [taxSettings, setTaxSettings] = useState<TaxSettingsType>(DEFAULT_TAX_SETTINGS);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [summarizeFlags, setSummarizeFlags] = useState<boolean[]>([]);
 
   const selectedProduct = products[currentProductIndex] || null;
+  const selectedSummarizeEnabled = summarizeFlags[currentProductIndex] ?? true;
 
   // 初期データ読み込み
   useEffect(() => {
@@ -49,6 +51,19 @@ function EditContent() {
     if (savedProducts && savedProducts.length > 0) {
       setProducts(savedProducts);
       setCurrentProductIndex(0);
+      // AI要約フラグを復元（デフォルト: 全てON）
+      try {
+        const savedFlags = sessionStorage.getItem('summarizeFlags');
+        if (savedFlags) {
+          const parsed = JSON.parse(savedFlags) as boolean[];
+          // 商品数に合わせてリサイズ
+          setSummarizeFlags(savedProducts.map((_, i) => parsed[i] ?? true));
+        } else {
+          setSummarizeFlags(savedProducts.map(() => true));
+        }
+      } catch {
+        setSummarizeFlags(savedProducts.map(() => true));
+      }
       console.log('[edit] 選択商品を読み込みました:', savedProducts.length, '件');
     } else {
       console.log('[edit] 選択商品が見つかりません');
@@ -122,6 +137,16 @@ function EditContent() {
     ));
   }, []);
 
+  // AI要約トグル（個別）
+  const handleToggleSummarize = useCallback((index: number) => {
+    setSummarizeFlags(prev => prev.map((v, i) => i === index ? !v : v));
+  }, []);
+
+  // AI要約トグル（全選択/全解除）
+  const handleToggleAllSummarize = useCallback((enabled: boolean) => {
+    setSummarizeFlags(prev => prev.map(() => enabled));
+  }, []);
+
   if (!isLoaded) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -167,6 +192,7 @@ function EditContent() {
               // 印刷前にデータを保存
               saveSelectedProducts(products, templateId);
               sessionStorage.setItem('taxSettings', JSON.stringify(taxSettings));
+              sessionStorage.setItem('summarizeFlags', JSON.stringify(summarizeFlags));
               router.push(`/print?template=${templateId}`);
             }}
             disabled={products.length === 0}
@@ -217,6 +243,7 @@ function EditContent() {
                   elements={elements}
                   product={selectedProduct}
                   taxSettings={taxSettings}
+                  summarizeEnabled={selectedSummarizeEnabled}
                 />
               </div>
             </div>
@@ -230,6 +257,9 @@ function EditContent() {
                 onSelectProduct={handleSelectProduct}
                 roundingMethod={taxSettings.roundingMode}
                 onEditProduct={handleEditProduct}
+                summarizeFlags={summarizeFlags}
+                onToggleSummarize={handleToggleSummarize}
+                onToggleAllSummarize={handleToggleAllSummarize}
               />
             </div>
           }

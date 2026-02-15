@@ -12,6 +12,9 @@ interface ProductDataTableProps {
   onSelectProduct: (index: number) => void;
   roundingMethod: 'round' | 'floor' | 'ceil';
   onEditProduct?: (index: number, field: string, value: string) => void;
+  summarizeFlags?: boolean[];
+  onToggleSummarize?: (index: number) => void;
+  onToggleAllSummarize?: (enabled: boolean) => void;
 }
 
 /**
@@ -24,8 +27,22 @@ export function ProductDataTable({
   onSelectProduct,
   roundingMethod,
   onEditProduct,
+  summarizeFlags,
+  onToggleSummarize,
+  onToggleAllSummarize,
 }: ProductDataTableProps) {
   const usedColumns = useMemo(() => getUsedColumns(elements), [elements]);
+
+  // テンプレートに{{description}}が含まれるかチェック
+  const hasDescription = useMemo(() =>
+    elements.some(el => el.type === 'text' && (el as any).content?.includes('{{description}}')),
+    [elements]
+  );
+  const showSummarizeColumn = hasDescription && !!summarizeFlags && !!onToggleSummarize;
+
+  // 全選択チェックボックスの状態
+  const allSummarizeEnabled = summarizeFlags?.every(Boolean) ?? true;
+  const noneSummarizeEnabled = summarizeFlags?.every(v => !v) ?? false;
 
   // 列幅の状態
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
@@ -124,7 +141,8 @@ export function ProductDataTable({
   }
 
   // テーブルの総幅を計算
-  const totalWidth = 32 + 40 + usedColumns.reduce((sum, col) => sum + (columnWidths[col.key] || 120), 0);
+  const summarizeColWidth = showSummarizeColumn ? 64 : 0;
+  const totalWidth = 32 + 40 + summarizeColWidth + usedColumns.reduce((sum, col) => sum + (columnWidths[col.key] || 120), 0);
 
   return (
     <div
@@ -135,6 +153,7 @@ export function ProductDataTable({
         <colgroup>
           <col style={{ width: 32 }} />
           <col style={{ width: 40 }} />
+          {showSummarizeColumn && <col style={{ width: summarizeColWidth }} />}
           {usedColumns.map(col => (
             <col key={col.key} style={{ width: columnWidths[col.key] || 120 }} />
           ))}
@@ -145,6 +164,22 @@ export function ProductDataTable({
             <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 border-b border-gray-200">
               #
             </th>
+            {showSummarizeColumn && (
+              <th className="px-1 py-2 text-center text-xs font-medium text-gray-500 border-b border-gray-200">
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="text-[10px] leading-tight">AI要約</span>
+                  <input
+                    type="checkbox"
+                    checked={allSummarizeEnabled}
+                    ref={(el) => { if (el) el.indeterminate = !allSummarizeEnabled && !noneSummarizeEnabled; }}
+                    onChange={() => onToggleAllSummarize?.(!allSummarizeEnabled)}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    title={allSummarizeEnabled ? '全て解除' : '全て選択'}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              </th>
+            )}
             {usedColumns.map((col) => (
               <th
                 key={col.key}
@@ -191,6 +226,19 @@ export function ProductDataTable({
                 <td className="px-2 py-2 text-center text-xs text-gray-400 border-b border-gray-100">
                   {index + 1}
                 </td>
+                {/* AI要約チェック */}
+                {showSummarizeColumn && (
+                  <td className="px-1 py-2 text-center border-b border-gray-100">
+                    <input
+                      type="checkbox"
+                      checked={summarizeFlags?.[index] ?? true}
+                      onChange={() => onToggleSummarize?.(index)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      title={summarizeFlags?.[index] ? 'AI要約を無効にする' : 'AI要約を有効にする'}
+                    />
+                  </td>
+                )}
                 {/* データセル */}
                 {usedColumns.map((col) => (
                   <td
