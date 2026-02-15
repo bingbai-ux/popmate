@@ -75,7 +75,7 @@ export function replacePlaceholders(
     '{{priceNumber}}': formatPriceNumber(product.price),
     '{{taxIncludedPrice}}': formatPrice(taxIncludedPrice),
     '{{taxIncludedPriceNumber}}': formatPriceNumber(taxIncludedPrice),
-    '{{description}}': product.description || '',
+    '{{description}}': (product.description || '').replace(/\r?\n/g, '').replace(/\s+/g, ''),
     '{{maker}}': product.maker || product.groupCode || product.tag || '',
     '{{taxRate}}': `${productTaxRate}%`,
     '{{taxRateNumber}}': String(productTaxRate),
@@ -200,7 +200,8 @@ export async function replaceElementPlaceholdersWithSummarize(
 
       if (hasDescription && product.description) {
         // description部分のみ要約（他のテキストはそのまま保持）
-        const descriptionWithoutNewlines = product.description.replace(/\r?\n/g, '');
+        // スマレジの元データに含まれる改行・スペースも除去
+        const descriptionWithoutNewlines = product.description.replace(/\r?\n/g, '').replace(/\s+/g, '');
         // description以外のテキスト部分の文字数を計算し、差し引く
         const otherTextLength = contentWithoutNewlines.length - descriptionWithoutNewlines.length;
         const descriptionTargetChars = Math.max(10, targetChars - otherTextLength);
