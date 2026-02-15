@@ -71,7 +71,7 @@ function transformSmaregiProduct(p: any): Product {
     categoryId: String(p.categoryId || ''),
     categoryName: String(p.categoryName || ''),
     groupCode: String(p.groupCode || ''),
-    description: String(p.description || ''),
+    description: String(p.description || '').replace(/\s+/g, ''),
     tag: String(p.tag || ''),
     maker: String(p.tag || ''),               // ★ メーカー = tag
     taxDivision: (String(p.taxDivision || '1') as '0' | '1' | '2'),
