@@ -61,21 +61,27 @@ async function summarizeWithGemini(text: string, targetChars: number, apiKey: st
   // 入力テキストから改行を削除
   const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
 
+  const minChars = Math.floor(targetChars * 0.85);
   const isShortText = cleanText.length <= 50;
   const prompt = isShortText
-    ? `以下のテキストを${targetChars}文字以内に短縮してください。
+    ? `以下のテキストを${minChars}〜${targetChars}文字の範囲に短縮してください。
 ルール：
+- 出力は必ず${minChars}文字以上、${targetChars}文字以下にしてください。短すぎるのはNGです
 - 商品名や固有名詞はできるだけ残してください
 - 内容量（g, ml等）は省略可能です
 - 改行は入れず1行で出力してください
 - 短縮したテキストのみを出力してください
 
 テキスト：${cleanText}`
-    : `あなたは商品説明文を簡潔に要約するアシスタントです。
+    : `あなたは商品説明文を要約するアシスタントです。テキストボックスに収まるギリギリの長さで要約してください。
 
-以下のルールに従ってください：
-- 必ず${targetChars}文字以内に収めてください
-- できるだけ元の文章を残し、最大限テキストをキープしてください
+最重要ルール：
+- 出力は必ず${minChars}文字以上、${targetChars}文字以下にしてください
+- ${minChars}文字未満の短い出力は絶対にNGです。スペースを最大限活用してください
+- 目標は${targetChars}文字ギリギリです。余白を残さず情報を詰め込んでください
+
+その他のルール：
+- できるだけ元の文章の表現をそのまま残してください
 - 商品の特徴や魅力を維持してください
 - 自然な日本語で出力してください
 - 「...」や「等」は使わず、完結した文章にしてください
@@ -83,7 +89,7 @@ async function summarizeWithGemini(text: string, targetChars: number, apiKey: st
 - 要約した文章のみを出力してください（説明や前置きは不要）
 - 改行は絶対に入れないでください。1行で出力してください
 
-以下の商品説明文を${targetChars}文字以内に要約してください：
+以下の商品説明文を${minChars}〜${targetChars}文字の範囲で要約してください：
 
 ${cleanText}`;
 
@@ -157,6 +163,7 @@ ${cleanText}`;
  * OpenAI API で要約
  */
 async function summarizeWithOpenAI(text: string, targetChars: number, apiKey: string) {
+  const minChars = Math.floor(targetChars * 0.85);
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -169,17 +176,20 @@ async function summarizeWithOpenAI(text: string, targetChars: number, apiKey: st
         messages: [
           {
             role: 'system',
-            content: `あなたは商品説明文を簡潔に要約するアシスタントです。
-以下のルールに従ってください：
-- 必ず${targetChars}文字以内に収めてください
+            content: `あなたは商品説明文を要約するアシスタントです。テキストボックスに収まるギリギリの長さで要約してください。
+最重要ルール：
+- 出力は必ず${minChars}文字以上、${targetChars}文字以下にしてください
+- ${minChars}文字未満の短い出力は絶対にNGです。スペースを最大限活用してください
+- 目標は${targetChars}文字ギリギリです
+その他のルール：
+- できるだけ元の文章の表現をそのまま残してください
 - 商品の特徴や魅力を維持してください
-- 自然な日本語で出力してください
-- 「...」や「等」は使わず、完結した文章にしてください
+- 自然な日本語で、完結した文章にしてください
 - 重要なキーワード（産地、特徴、効能など）を優先的に残してください`,
           },
           {
             role: 'user',
-            content: `以下の商品説明文を${targetChars}文字以内に要約してください：\n\n${text}`,
+            content: `以下の商品説明文を${minChars}〜${targetChars}文字の範囲で要約してください：\n\n${text}`,
           },
         ],
         max_tokens: 200,
