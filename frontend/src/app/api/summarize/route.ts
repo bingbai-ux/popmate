@@ -55,18 +55,46 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * AI要約結果をtargetChars以内に文の区切りでトリミング
+ * 自然な文末（。！？）で切ることで、要約として自然な形を保つ
+ */
+function trimToFit(text: string, targetChars: number): string {
+  if (text.length <= targetChars) return text;
+
+  // targetChars以内で最後の文末（。！？）を探す
+  const truncated = text.substring(0, targetChars);
+  const lastSentenceEnd = Math.max(
+    truncated.lastIndexOf('。'),
+    truncated.lastIndexOf('！'),
+    truncated.lastIndexOf('？')
+  );
+
+  // 文末がtargetCharsの80%以上の位置にあれば、そこで切って自然な終わり方にする
+  if (lastSentenceEnd >= targetChars * 0.8) {
+    return text.substring(0, lastSentenceEnd + 1);
+  }
+
+  // 文末が遠い場合はギリギリまで使って…で終わる
+  return text.substring(0, targetChars - 1) + '…';
+}
+
+/**
  * Gemini API で要約
+ * 戦略: LLMは文字数を過少に出力しがちなので、targetの130%で依頼し、
+ * 返ってきた結果をtargetChars以内の文末でトリミングする
  */
 async function summarizeWithGemini(text: string, targetChars: number, apiKey: string) {
   // 入力テキストから改行を削除
   const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
 
-  const minChars = Math.floor(targetChars * 0.95);
+  // LLMの過少出力を補正するため、多めに依頼
+  const requestChars = Math.floor(targetChars * 1.3);
+  const requestMinChars = targetChars;
   const isShortText = cleanText.length <= 50;
   const prompt = isShortText
-    ? `以下のテキストを${minChars}〜${targetChars}文字の範囲に短縮してください。
+    ? `以下のテキストを${requestMinChars}〜${requestChars}文字の範囲に短縮してください。
 ルール：
-- 出力は必ず${minChars}文字以上、${targetChars}文字以下にしてください。短すぎるのはNGです
+- 出力は必ず${requestMinChars}文字以上、${requestChars}文字以下にしてください。短すぎるのはNGです
 - 商品名や固有名詞はできるだけ残してください
 - 内容量（g, ml等）は省略可能です
 - 改行は入れず1行で出力してください
@@ -76,9 +104,9 @@ async function summarizeWithGemini(text: string, targetChars: number, apiKey: st
     : `あなたは商品説明文を要約するアシスタントです。テキストボックスに収まるギリギリの長さで要約してください。
 
 最重要ルール：
-- 出力は必ず${minChars}文字以上、${targetChars}文字以下にしてください
-- ${minChars}文字未満の短い出力は絶対にNGです。スペースを最大限活用してください
-- 目標は${targetChars}文字ギリギリです。余白を残さず情報を詰め込んでください
+- 出力は必ず${requestMinChars}文字以上、${requestChars}文字以下にしてください
+- ${requestMinChars}文字未満の短い出力は絶対にNGです。スペースを最大限活用してください
+- 目標は${requestChars}文字ギリギリです。余白を残さず情報を詰め込んでください
 
 その他のルール：
 - できるだけ元の文章の表現をそのまま残してください
@@ -89,11 +117,11 @@ async function summarizeWithGemini(text: string, targetChars: number, apiKey: st
 - 要約した文章のみを出力してください（説明や前置きは不要）
 - 改行は絶対に入れないでください。1行で出力してください
 
-以下の商品説明文を${minChars}〜${targetChars}文字の範囲で要約してください：
+以下の商品説明文を${requestMinChars}〜${requestChars}文字の範囲で要約してください：
 
 ${cleanText}`;
 
-  console.log('[Gemini] Sending request, targetChars:', targetChars);
+  console.log('[Gemini] Sending request, targetChars:', targetChars, 'requestChars:', requestChars);
 
   try {
     const response = await fetch(
@@ -111,7 +139,7 @@ ${cleanText}`;
           ],
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 200,
+            maxOutputTokens: 300,
           },
         }),
       }
@@ -135,20 +163,24 @@ ${cleanText}`;
 
     // 出力から改行を削除して1行に
     const rawSummarized = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-    const summarized = rawSummarized.replace(/\r?\n/g, '').trim() || simpleSummarize(cleanText, targetChars);
+    const summarized = rawSummarized.replace(/\r?\n/g, '').trim();
 
-    // 文字数が超えている場合は再度カット
-    let finalText = summarized.length > targetChars
-      ? summarized.substring(0, targetChars - 1) + '…'
-      : summarized;
-
-    // AI要約が短すぎる場合、元テキストの切り詰めにフォールバック
-    if (finalText.length < minChars && cleanText.length > targetChars) {
-      console.log('[Gemini] Result too short, falling back to truncation:', {
-        resultLength: finalText.length, minChars, targetChars,
+    if (!summarized) {
+      return NextResponse.json({
+        summarized: simpleSummarize(text, targetChars),
+        method: 'simple',
+        message: 'Gemini の応答が空のため、簡易省略を適用しました',
       });
-      finalText = cleanText.substring(0, targetChars - 1) + '…';
     }
+
+    // AI結果をtargetChars以内に文の区切りでトリミング
+    const finalText = trimToFit(summarized, targetChars);
+
+    console.log('[Gemini] Result:', {
+      rawLength: summarized.length,
+      finalLength: finalText.length,
+      targetChars,
+    });
 
     return NextResponse.json({
       summarized: finalText,
@@ -169,9 +201,11 @@ ${cleanText}`;
 
 /**
  * OpenAI API で要約
+ * 同じく多めに依頼してトリミングする戦略
  */
 async function summarizeWithOpenAI(text: string, targetChars: number, apiKey: string) {
-  const minChars = Math.floor(targetChars * 0.95);
+  const requestChars = Math.floor(targetChars * 1.3);
+  const requestMinChars = targetChars;
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -186,9 +220,9 @@ async function summarizeWithOpenAI(text: string, targetChars: number, apiKey: st
             role: 'system',
             content: `あなたは商品説明文を要約するアシスタントです。テキストボックスに収まるギリギリの長さで要約してください。
 最重要ルール：
-- 出力は必ず${minChars}文字以上、${targetChars}文字以下にしてください
-- ${minChars}文字未満の短い出力は絶対にNGです。スペースを最大限活用してください
-- 目標は${targetChars}文字ギリギリです
+- 出力は必ず${requestMinChars}文字以上、${requestChars}文字以下にしてください
+- ${requestMinChars}文字未満の短い出力は絶対にNGです。スペースを最大限活用してください
+- 目標は${requestChars}文字ギリギリです
 その他のルール：
 - できるだけ元の文章の表現をそのまま残してください
 - 商品の特徴や魅力を維持してください
@@ -197,10 +231,10 @@ async function summarizeWithOpenAI(text: string, targetChars: number, apiKey: st
           },
           {
             role: 'user',
-            content: `以下の商品説明文を${minChars}〜${targetChars}文字の範囲で要約してください：\n\n${text}`,
+            content: `以下の商品説明文を${requestMinChars}〜${requestChars}文字の範囲で要約してください：\n\n${text}`,
           },
         ],
-        max_tokens: 200,
+        max_tokens: 300,
         temperature: 0.3,
       }),
     });
@@ -216,21 +250,24 @@ async function summarizeWithOpenAI(text: string, targetChars: number, apiKey: st
     }
 
     const data = await response.json();
-    const summarized = data.choices[0]?.message?.content?.trim() || simpleSummarize(text, targetChars);
-    const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+    const summarized = data.choices[0]?.message?.content?.trim() || '';
 
-    // 文字数が超えている場合は再度カット
-    let finalText = summarized.length > targetChars
-      ? summarized.substring(0, targetChars - 1) + '…'
-      : summarized;
-
-    // AI要約が短すぎる場合、元テキストの切り詰めにフォールバック
-    if (finalText.length < minChars && cleanText.length > targetChars) {
-      console.log('[OpenAI] Result too short, falling back to truncation:', {
-        resultLength: finalText.length, minChars, targetChars,
+    if (!summarized) {
+      return NextResponse.json({
+        summarized: simpleSummarize(text, targetChars),
+        method: 'simple',
+        message: 'OpenAI の応答が空のため、簡易省略を適用しました',
       });
-      finalText = cleanText.substring(0, targetChars - 1) + '…';
     }
+
+    // AI結果をtargetChars以内に文の区切りでトリミング
+    const finalText = trimToFit(summarized, targetChars);
+
+    console.log('[OpenAI] Result:', {
+      rawLength: summarized.length,
+      finalLength: finalText.length,
+      targetChars,
+    });
 
     return NextResponse.json({
       summarized: finalText,
@@ -274,9 +311,9 @@ function simpleSummarize(text: string, maxChars: number): string {
     }
   }
 
-  // 文の区切りベースの結果がmaxCharsの90%未満の場合、
+  // 文の区切りベースの結果がmaxCharsの80%未満の場合、
   // 元テキストを直接切り詰めてスペースを最大限活用する
-  if (result.length < Math.floor(maxChars * 0.9)) {
+  if (result.length < Math.floor(maxChars * 0.8)) {
     return cleanText.substring(0, maxChars - 1) + '…';
   }
 

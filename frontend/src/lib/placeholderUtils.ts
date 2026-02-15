@@ -131,22 +131,7 @@ async function summarizeText(text: string, maxChars: number): Promise<string> {
 
     const data = await response.json();
     console.log('[AI Summarize] Response:', { method: data.method, summarizedLength: data.summarizedLength });
-    const summarized = data.summarized || text.substring(0, maxChars - 1) + '…';
-
-    // AI要約が短すぎる場合、元テキストの切り詰めにフォールバック
-    // LLMは文字数指示を正確に守れないことが多いため、
-    // ボックスをギリギリまで埋めるには元テキストの直接切り詰めが最も確実
-    const minAcceptableLength = Math.floor(maxChars * 0.9);
-    if (summarized.length < minAcceptableLength && text.length > maxChars) {
-      console.log('[AI Summarize] Result too short, falling back to truncation:', {
-        summarizedLength: summarized.length,
-        minAcceptable: minAcceptableLength,
-        maxChars,
-      });
-      return text.substring(0, maxChars - 1) + '…';
-    }
-
-    return summarized;
+    return data.summarized || text.substring(0, maxChars - 1) + '…';
   } catch (error) {
     console.error('[AI Summarize] Error:', error);
     return text.substring(0, maxChars - 1) + '…';
