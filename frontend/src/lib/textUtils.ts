@@ -96,7 +96,7 @@ export function hasPlaceholders(content: string): boolean {
 
 /**
  * 禁則処理を適用したテキストを生成
- * 数字と単位、カタカナ連続語などが途切れないようにする
+ * カタカナ語・英単語・数字+単位などが途切れないようにする
  * @param text 元のテキスト
  * @returns 禁則処理適用済みテキスト
  */
@@ -104,8 +104,12 @@ export function applyKinsoku(text: string): string {
   if (!text) return text;
 
   // 分離禁止パターン（正規表現）
-  // 数字+単位（1500g、100ml、50%など）
   const patterns = [
+    // カタカナ連続語を一緒にする: フルーツ、ミューズリー、シード 等
+    // ー（長音）・ヴ・中黒（・）も含めてカタカナ語として扱う
+    /[ァ-ヶー・ヴ]{2,}/g,
+    // 英単語（半角・全角）を一緒にする
+    /[a-zA-Zａ-ｚＡ-Ｚ]{2,}/g,
     // 数字と単位を一緒にする: 1500g, 100ml, 50%, ¥1,000 など
     /(\d[\d,]*\.?\d*)\s*(g|kg|mg|ml|L|l|mm|cm|m|%|円|個|本|枚|袋|箱|パック|kcal|cal)/g,
     // 価格表記: ¥100, 100円
@@ -114,7 +118,7 @@ export function applyKinsoku(text: string): string {
 
   let result = text;
 
-  // 数字+単位パターンにWord Joiner (U+2060)を挿入して分離を防ぐ
+  // 各パターンにWord Joiner (U+2060)を挿入して分離を防ぐ
   // ブラウザはWord Joinerの位置で改行しない
   patterns.forEach(pattern => {
     result = result.replace(pattern, (match) => {
