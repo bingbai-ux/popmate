@@ -61,7 +61,7 @@ async function summarizeWithGemini(text: string, targetChars: number, apiKey: st
   // 入力テキストから改行を削除
   const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
 
-  const minChars = Math.floor(targetChars * 0.85);
+  const minChars = Math.floor(targetChars * 0.95);
   const isShortText = cleanText.length <= 50;
   const prompt = isShortText
     ? `以下のテキストを${minChars}〜${targetChars}文字の範囲に短縮してください。
@@ -138,9 +138,17 @@ ${cleanText}`;
     const summarized = rawSummarized.replace(/\r?\n/g, '').trim() || simpleSummarize(cleanText, targetChars);
 
     // 文字数が超えている場合は再度カット
-    const finalText = summarized.length > targetChars
+    let finalText = summarized.length > targetChars
       ? summarized.substring(0, targetChars - 1) + '…'
       : summarized;
+
+    // AI要約が短すぎる場合、元テキストの切り詰めにフォールバック
+    if (finalText.length < minChars && cleanText.length > targetChars) {
+      console.log('[Gemini] Result too short, falling back to truncation:', {
+        resultLength: finalText.length, minChars, targetChars,
+      });
+      finalText = cleanText.substring(0, targetChars - 1) + '…';
+    }
 
     return NextResponse.json({
       summarized: finalText,
@@ -163,7 +171,7 @@ ${cleanText}`;
  * OpenAI API で要約
  */
 async function summarizeWithOpenAI(text: string, targetChars: number, apiKey: string) {
-  const minChars = Math.floor(targetChars * 0.85);
+  const minChars = Math.floor(targetChars * 0.95);
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -209,11 +217,20 @@ async function summarizeWithOpenAI(text: string, targetChars: number, apiKey: st
 
     const data = await response.json();
     const summarized = data.choices[0]?.message?.content?.trim() || simpleSummarize(text, targetChars);
+    const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
 
     // 文字数が超えている場合は再度カット
-    const finalText = summarized.length > targetChars
+    let finalText = summarized.length > targetChars
       ? summarized.substring(0, targetChars - 1) + '…'
       : summarized;
+
+    // AI要約が短すぎる場合、元テキストの切り詰めにフォールバック
+    if (finalText.length < minChars && cleanText.length > targetChars) {
+      console.log('[OpenAI] Result too short, falling back to truncation:', {
+        resultLength: finalText.length, minChars, targetChars,
+      });
+      finalText = cleanText.substring(0, targetChars - 1) + '…';
+    }
 
     return NextResponse.json({
       summarized: finalText,
@@ -257,8 +274,9 @@ function simpleSummarize(text: string, maxChars: number): string {
     }
   }
 
-  // 何も収まらない場合は強制カット
-  if (result.length === 0) {
+  // 文の区切りベースの結果がmaxCharsの90%未満の場合、
+  // 元テキストを直接切り詰めてスペースを最大限活用する
+  if (result.length < Math.floor(maxChars * 0.9)) {
     return cleanText.substring(0, maxChars - 1) + '…';
   }
 
