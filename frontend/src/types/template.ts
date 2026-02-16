@@ -108,6 +108,30 @@ export function getTemplateById(id: string): CustomTemplate | undefined {
   return getAllTemplates().find(t => t.id === id);
 }
 
+/**
+ * テンプレート情報がlocalStorageに存在することを保証する
+ * 別PCで保存プロジェクトを開く際、カスタムテンプレートが未登録の場合に登録する
+ */
+export function ensureTemplateRegistered(template: { id: string; name: string; width: number; height: number }): void {
+  if (typeof window === 'undefined') return;
+  // システムテンプレートは既に定義済み
+  if (DEFAULT_TEMPLATES.some(t => t.id === template.id)) return;
+  // 既にlocalStorageに存在する場合はスキップ
+  const existing = getCustomTemplates();
+  if (existing.some(t => t.id === template.id)) return;
+  // 未登録のカスタムテンプレートを追加
+  existing.push({
+    id: template.id,
+    name: template.name,
+    description: '',
+    width: template.width,
+    height: template.height,
+    isSystem: false,
+    createdAt: new Date().toISOString(),
+  });
+  localStorage.setItem('customTemplates', JSON.stringify(existing));
+}
+
 // ─── バックエンド同期関数 ───
 
 /**
