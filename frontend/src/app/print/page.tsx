@@ -32,11 +32,14 @@ function PrintContent() {
   const router = useRouter();
   const templateId = searchParams.get('template') || 'price-pop';
 
-  // テンプレート設定
+  // テンプレート設定（別PCではlocalStorageにカスタムテンプレートが無いためsessionStorageからも復元）
   const templateData = getTemplateById(templateId);
+  const savedState = !templateData ? loadEditorState(templateId) : null;
   const template: TemplateConfig = templateData
     ? { id: templateData.id, name: templateData.name, width: templateData.width, height: templateData.height }
-    : { id: 'price-pop', name: 'プライスポップ', width: 91, height: 55 };
+    : savedState?.templateWidth && savedState?.templateHeight
+      ? { id: templateId, name: savedState.templateName || templateId, width: savedState.templateWidth, height: savedState.templateHeight }
+      : { id: 'price-pop', name: 'プライスポップ', width: 91, height: 55 };
 
   // --- State ---
   const [products, setProducts] = useState<Product[]>([]);

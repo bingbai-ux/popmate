@@ -8,6 +8,9 @@ import type { EditorElement as EditorElementType } from '@/types/editor';
 export interface EditorState {
   elements: EditorElementType[];
   templateId: string;
+  templateName?: string;
+  templateWidth?: number;
+  templateHeight?: number;
   zoom: number;
   updatedAt: number;
   roundingMethod: RoundingMethod;
