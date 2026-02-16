@@ -33,16 +33,10 @@ function EditorContent() {
   const templateId = searchParams.get('template') || 'price-pop';
 
   // テンプレート設定を取得
-  // 1. テンプレートマスタ（localStorage）から検索
-  // 2. 見つからない場合、sessionStorageの保存状態からサイズを復元
-  //    （別PCで開いた場合、localStorageにカスタムテンプレートが無いため）
   const templateData = getTemplateById(templateId);
-  const savedState = !templateData ? loadEditorState(templateId) : null;
   const template: TemplateConfig = templateData
     ? { id: templateData.id, name: templateData.name, width: templateData.width, height: templateData.height }
-    : savedState?.templateWidth && savedState?.templateHeight
-      ? { id: templateId, name: savedState.templateName || templateId, width: savedState.templateWidth, height: savedState.templateHeight }
-      : { id: 'price-pop', name: 'プライスポップ', width: 91, height: 55 };
+    : { id: 'price-pop', name: 'プライスポップ', width: 91, height: 55 };
 
   const [elements, setElements] = useState<EditorElement[]>([]);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import ProgressBar from '@/components/ProgressBar';
 import Link from 'next/link';
-import { CustomTemplate, getAllTemplates, deleteCustomTemplate, fetchAndMergeRemoteTemplates, DEFAULT_TEMPLATES } from '@/types/template';
+import { CustomTemplate, getAllTemplates, deleteCustomTemplate, fetchAndMergeRemoteTemplates, DEFAULT_TEMPLATES, ensureTemplateRegistered } from '@/types/template';
 import { SavedProject } from '@/types/project';
 import { getSavedTemplates, deleteProject, duplicateProject } from '@/lib/projectStorage';
 import { saveEditorState } from '@/lib/editorStorage';
@@ -62,6 +62,8 @@ export default function TemplatesPage() {
 
   // 保存テンプレートを選択 → エディター画面へ
   const handleSelectSavedTemplate = (project: SavedProject) => {
+    // カスタムテンプレートをlocalStorageに登録（別PCで開いた場合の対策）
+    ensureTemplateRegistered(project.template);
     saveEditorState({
       elements: project.elements,
       templateId: project.template.id,
