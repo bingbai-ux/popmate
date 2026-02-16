@@ -65,6 +65,9 @@ export default function TemplatesPage() {
     saveEditorState({
       elements: project.elements,
       templateId: project.template.id,
+      templateName: project.template.name,
+      templateWidth: project.template.width,
+      templateHeight: project.template.height,
       zoom: 1,
       roundingMethod: project.taxSettings?.roundingMode || 'floor',
     });
