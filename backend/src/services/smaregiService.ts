@@ -432,14 +432,9 @@ export async function searchProducts(params: {
 
   const categoryMap = await getCategoryMap();
 
+  // ★ キーワードはスマレジAPIに送信せず、全商品取得後にサーバー側でフィルタリング
+  // （スマレジAPIの productName パラメータが期待通りに動作しないため）
   const baseParams: Record<string, string> = {};
-  if (params.keyword) {
-    // スペース区切りの場合、最も長いキーワードをSmaregi APIに送信
-    // （API側では productName の部分一致検索のみ対応のため）
-    const keywords = params.keyword.split(/[\s　]+/).filter(Boolean);
-    const longestKeyword = keywords.reduce((a, b) => a.length >= b.length ? a : b, '');
-    baseParams['productName'] = longestKeyword;
-  }
 
   const transformProduct = (item: any): SmaregiProduct => ({
     productId: String(item.productId),
