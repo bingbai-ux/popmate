@@ -27,6 +27,7 @@ function DataSelectContent() {
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [dataSource, setDataSource] = useState<'smaregi' | 'mock' | null>(null);
 
   // ─── 選択済み商品（検索をまたいで保持） ───
   const [selectedProducts, setSelectedProducts] = useState<Map<string, Product>>(new Map());
@@ -89,6 +90,7 @@ function DataSelectContent() {
       });
 
       setSearchResults(result.products);
+      setDataSource(result.source);
       console.log(`[data-select] 検索結果: ${result.products.length}件 (${result.source})`);
     } catch (e: any) {
       console.error('[data-select] 検索エラー:', e.message);
@@ -190,6 +192,18 @@ function DataSelectContent() {
               hasSearched={hasSearched}
             />
           </div>
+
+          {/* スマレジ未接続の警告 */}
+          {dataSource === 'mock' && hasSearched && (
+            <div className="px-4">
+              <div className="flex items-center gap-2 text-sm text-orange-700 bg-orange-50 border border-orange-200 px-4 py-2 rounded-lg">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <span>スマレジAPIに接続できていません。サンプルデータを表示しています。</span>
+              </div>
+            </div>
+          )}
 
           {/* 商品テーブル */}
           <div className="flex-1 overflow-auto px-4 pb-4">

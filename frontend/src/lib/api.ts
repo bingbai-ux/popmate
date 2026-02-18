@@ -127,6 +127,40 @@ export interface SearchFiltersParam {
   tags?: string[];          // メーカー（タグ）複数選択
 }
 
+// ─── モックデータのフィルタリング ───
+function filterMockProducts(filters: SearchFiltersParam): Product[] {
+  let products = [...MOCK_PRODUCTS];
+
+  if (filters.keyword) {
+    const keywords = filters.keyword.toLowerCase().split(/[\s　]+/).filter(Boolean);
+    if (keywords.length > 0) {
+      products = products.filter(p => {
+        const searchTarget = [
+          p.productName,
+          p.productCode,
+          p.description || '',
+          p.maker || '',
+          p.tag || '',
+          String(p.price || ''),
+        ].join(' ').toLowerCase();
+        return keywords.every(kw => searchTarget.includes(kw));
+      });
+    }
+  }
+
+  if (filters.groupCodes && filters.groupCodes.length > 0) {
+    const gcSet = new Set(filters.groupCodes);
+    products = products.filter(p => p.groupCode && gcSet.has(p.groupCode));
+  }
+
+  if (filters.tags && filters.tags.length > 0) {
+    const tagSet = new Set(filters.tags);
+    products = products.filter(p => p.tag && tagSet.has(p.tag));
+  }
+
+  return products;
+}
+
 export async function searchProducts(filters: SearchFiltersParam): Promise<{
   products: Product[];
   source: 'smaregi' | 'mock';
@@ -156,16 +190,17 @@ export async function searchProducts(filters: SearchFiltersParam): Promise<{
     const data = json.data || json;
     const products = Array.isArray(data) ? data.map(transformSmaregiProduct) : [];
 
-    // フィルタなしで0件 → モックにフォールバック
+    // フィルタなしで0件 → モックにフォールバック（フィルタ適用済み）
     const noFilters = !filters.keyword && !filters.tags?.length && !filters.groupCodes?.length && !filters.categoryIds?.length;
     if (products.length === 0 && noFilters) {
-      return { products: MOCK_PRODUCTS, source: 'mock' };
+      return { products: filterMockProducts(filters), source: 'mock' };
     }
 
     return { products, source: 'smaregi' };
   } catch (error: any) {
     console.error('[api] 商品検索エラー:', error.message);
-    return { products: MOCK_PRODUCTS, source: 'mock' };
+    // モックデータにもフィルタを適用して返す
+    return { products: filterMockProducts(filters), source: 'mock' };
   }
 }
 
