@@ -34,9 +34,19 @@ function EditorContent() {
 
   // テンプレート設定を取得
   const templateData = getTemplateById(templateId);
-  const template: TemplateConfig = templateData
+  const baseTemplate: TemplateConfig = templateData
     ? { id: templateData.id, name: templateData.name, width: templateData.width, height: templateData.height }
     : { id: 'price-pop', name: 'プライスポップ', width: 91, height: 55 };
+
+  // テンプレートサイズを編集可能にする
+  const [templateWidth, setTemplateWidth] = useState(baseTemplate.width);
+  const [templateHeight, setTemplateHeight] = useState(baseTemplate.height);
+
+  const template: TemplateConfig = {
+    ...baseTemplate,
+    width: templateWidth,
+    height: templateHeight,
+  };
 
   const [elements, setElements] = useState<EditorElement[]>([]);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
@@ -139,6 +149,9 @@ function EditorContent() {
       setElements(restoredElements);
       setZoom(savedState.zoom);
       setRoundingMethod(savedState.roundingMethod);
+      // 保存されたテンプレートサイズを復元
+      if (savedState.templateWidth) setTemplateWidth(savedState.templateWidth);
+      if (savedState.templateHeight) setTemplateHeight(savedState.templateHeight);
       // 初期状態を履歴に追加
       setHistory([JSON.parse(JSON.stringify(restoredElements))]);
       setHistoryIndex(0);
@@ -158,10 +171,12 @@ function EditorContent() {
     saveEditorState({
       elements,
       templateId,
+      templateWidth,
+      templateHeight,
       zoom,
       roundingMethod,
     });
-  }, [elements, templateId, zoom, roundingMethod, isInitialized]);
+  }, [elements, templateId, templateWidth, templateHeight, zoom, roundingMethod, isInitialized]);
 
   // 要素変更時に履歴を更新（デバウンス付き）
   const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -499,9 +514,34 @@ function EditorContent() {
           </Link>
           <div className="h-6 w-px bg-border" />
           <h2 className="font-medium">{template.name}</h2>
-          <span className="text-sm text-gray-500">
-            {template.width} × {template.height} mm
-          </span>
+          <div className="flex items-center gap-1 text-sm text-gray-500">
+            <input
+              type="number"
+              value={templateWidth}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (!isNaN(v) && v > 0) setTemplateWidth(v);
+              }}
+              className="w-14 px-1.5 py-0.5 text-center border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              min={10}
+              max={1000}
+              step={1}
+            />
+            <span>×</span>
+            <input
+              type="number"
+              value={templateHeight}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (!isNaN(v) && v > 0) setTemplateHeight(v);
+              }}
+              className="w-14 px-1.5 py-0.5 text-center border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              min={10}
+              max={1000}
+              step={1}
+            />
+            <span>mm</span>
+          </div>
 
           {/* Undo/Redoボタン */}
           <div className="h-6 w-px bg-border ml-2" />
