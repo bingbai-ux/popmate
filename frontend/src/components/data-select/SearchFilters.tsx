@@ -73,7 +73,7 @@ export default function SearchFilters({
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="商品名、商品コードで検索..."
+            placeholder="商品名、メーカー、商品コード、価格で検索..."
             className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           />
         </div>

@@ -433,7 +433,13 @@ export async function searchProducts(params: {
   const categoryMap = await getCategoryMap();
 
   const baseParams: Record<string, string> = {};
-  if (params.keyword) baseParams['productName'] = params.keyword;
+  if (params.keyword) {
+    // スペース区切りの場合、最も長いキーワードをSmaregi APIに送信
+    // （API側では productName の部分一致検索のみ対応のため）
+    const keywords = params.keyword.split(/[\s　]+/).filter(Boolean);
+    const longestKeyword = keywords.reduce((a, b) => a.length >= b.length ? a : b, '');
+    baseParams['productName'] = longestKeyword;
+  }
 
   const transformProduct = (item: any): SmaregiProduct => ({
     productId: String(item.productId),
@@ -479,14 +485,24 @@ export async function searchProducts(params: {
     );
   }
 
-  // サーバーサイドフィルタ
+  // サーバーサイドフィルタ（部分一致: スペース区切りで全キーワードにマッチ）
   if (params.keyword) {
-    const kw = params.keyword.toLowerCase();
-    products = products.filter(p =>
-      p.productName.toLowerCase().includes(kw) ||
-      p.productCode.toLowerCase().includes(kw) ||
-      (p.description || '').toLowerCase().includes(kw)
-    );
+    // スペース（全角・半角）で分割し、空文字を除去
+    const keywords = params.keyword.toLowerCase().split(/[\s　]+/).filter(Boolean);
+    if (keywords.length > 0) {
+      products = products.filter(p => {
+        // 検索対象フィールドを結合
+        const searchTarget = [
+          p.productName,
+          p.productCode,
+          p.description || '',
+          p.tag || '',           // メーカー
+          String(p.price || ''), // 価格
+        ].join(' ').toLowerCase();
+        // 全キーワードが含まれていればマッチ（AND検索）
+        return keywords.every(kw => searchTarget.includes(kw));
+      });
+    }
   }
   if (params.groupCodes && params.groupCodes.length > 0) {
     const gcSet = new Set(params.groupCodes);

@@ -1,8 +1,9 @@
 /**
  * PDF出力ユーティリティ
- * 
+ *
  * 方式: 画面上のA4ページ要素の transform を一時解除してキャプチャ
  * ★ display: none は一切使わない
+ * ★ 高解像度PNG（300dpi）でテキストをくっきり出力
  */
 
 export interface PdfExportOptions {
@@ -20,7 +21,6 @@ export async function exportA4PDF(
 ): Promise<void> {
   const {
     filename = `popmate_${new Date().toISOString().slice(0, 10)}.pdf`,
-    quality = 0.92,
     onProgress,
   } = options;
 
@@ -91,14 +91,26 @@ export async function exportA4PDF(
   });
 
   // ★ POPフレームの境界クリップを防止
-  // html2canvasのレンダリング差異でPOP境界ギリギリのテキストが切れるため、
-  // キャプチャ中はPOPフレームのoverflowのみvisibleに変更
-  // （個別テキスト要素のoverflowはPreviewCanvasと同一の2x描画で一致するため変更不要）
   const popFrames = printPages.querySelectorAll<HTMLElement>('.pop-frame');
   const originalOverflows: string[] = [];
   popFrames.forEach((frame, i) => {
     originalOverflows.push(frame.style.overflow);
     frame.style.overflow = 'visible';
+  });
+
+  // ★ 空白フレームの「空白」テキストを非表示にする
+  // html2canvas は @media print を無視するため、直接非表示にする
+  const emptyFrameSpans = printPages.querySelectorAll<HTMLElement>('.empty-frame span');
+  emptyFrameSpans.forEach(span => {
+    span.style.display = 'none';
+  });
+  // 空白フレームの枠線も非表示にする（印刷時は不要）
+  const emptyFrames = printPages.querySelectorAll<HTMLElement>('.empty-frame');
+  const originalEmptyFrameStyles: string[] = [];
+  emptyFrames.forEach((frame, i) => {
+    originalEmptyFrameStyles.push(frame.style.cssText);
+    frame.style.border = 'none';
+    frame.style.backgroundColor = 'transparent';
   });
 
   // ★ レイアウト再計算を確実に待機
@@ -113,9 +125,9 @@ export async function exportA4PDF(
       // 進捗コールバック
       onProgress?.(i + 1, pages.length);
 
-      // ★ html2canvas でキャプチャ
+      // ★ html2canvas でキャプチャ（高解像度: 300dpi相当）
       const canvas = await html2canvas(page, {
-        scale: 2,                              // 150dpi相当
+        scale: 4,                              // 300dpi相当（96dpi × 4 ≒ 384dpi）
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
@@ -132,8 +144,8 @@ export async function exportA4PDF(
         scrollY: 0,
       });
 
-      // キャンバスを画像データに変換
-      const imgData = canvas.toDataURL('image/jpeg', quality);
+      // ★ PNG形式で出力（テキストがくっきり・ロスレス）
+      const imgData = canvas.toDataURL('image/png');
 
       // 2ページ目以降は新しいページを追加
       if (i > 0) {
@@ -141,9 +153,17 @@ export async function exportA4PDF(
       }
 
       // 画像を追加（用紙全体に配置）
-      pdf.addImage(imgData, 'JPEG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+      pdf.addImage(imgData, 'PNG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
     }
   } finally {
+    // ★ 空白フレームのスタイルを復元
+    emptyFrameSpans.forEach(span => {
+      span.style.display = '';
+    });
+    emptyFrames.forEach((frame, i) => {
+      frame.style.cssText = originalEmptyFrameStyles[i] || '';
+    });
+
     // ★ POPフレームのoverflowを復元
     popFrames.forEach((frame, i) => {
       frame.style.overflow = originalOverflows[i] || '';
