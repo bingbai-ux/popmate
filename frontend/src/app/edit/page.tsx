@@ -26,11 +26,12 @@ function EditContent() {
   const router = useRouter();
   const templateId = searchParams.get('template') || 'price-pop';
 
-  // テンプレート設定
+  // テンプレート設定（editorStorageのカスタムサイズを優先）
   const templateData = getTemplateById(templateId);
-  const template: TemplateConfig = templateData
+  const baseTemplate: TemplateConfig = templateData
     ? { id: templateData.id, name: templateData.name, width: templateData.width, height: templateData.height }
     : { id: 'price-pop', name: 'プライスポップ', width: 91, height: 55 };
+  const [template, setTemplate] = useState<TemplateConfig>(baseTemplate);
 
   // 状態
   const [products, setProducts] = useState<Product[]>([]);
@@ -73,6 +74,14 @@ function EditContent() {
     const savedEditorState = loadEditorState(templateId);
     if (savedEditorState && savedEditorState.elements.length > 0) {
       setElements(savedEditorState.elements as unknown as EditorElement[]);
+      // カスタムサイズを復元
+      if (savedEditorState.templateWidth && savedEditorState.templateHeight) {
+        setTemplate(prev => ({
+          ...prev,
+          width: savedEditorState.templateWidth!,
+          height: savedEditorState.templateHeight!,
+        }));
+      }
       console.log('[edit] エディター状態を読み込みました:', savedEditorState.elements.length, '要素');
     } else {
       // デフォルト要素を設定

@@ -19,8 +19,8 @@ import { loadSelectedProducts } from '@/lib/selectedProductsStorage';
 import { loadEditorState } from '@/lib/editorStorage';
 import {
   calculateLayout,
-  TEMPLATE_SIZES,
   PAPER_SIZES,
+  type TemplateSize,
   type LayoutResult,
   type PaperSize,
 } from '@/lib/printLayout';
@@ -32,11 +32,12 @@ function PrintContent() {
   const router = useRouter();
   const templateId = searchParams.get('template') || 'price-pop';
 
-  // テンプレート設定
+  // テンプレート設定（editorStorageのカスタムサイズを優先）
   const templateData = getTemplateById(templateId);
-  const template: TemplateConfig = templateData
+  const baseTemplate: TemplateConfig = templateData
     ? { id: templateData.id, name: templateData.name, width: templateData.width, height: templateData.height }
     : { id: 'price-pop', name: 'プライスポップ', width: 91, height: 55 };
+  const [template, setTemplate] = useState<TemplateConfig>(baseTemplate);
 
   // --- State ---
   const [products, setProducts] = useState<Product[]>([]);
@@ -84,6 +85,14 @@ function PrintContent() {
     const savedEditorState = loadEditorState(templateId);
     if (savedEditorState && savedEditorState.elements.length > 0) {
       setElements(savedEditorState.elements);
+      // カスタムサイズを復元
+      if (savedEditorState.templateWidth && savedEditorState.templateHeight) {
+        setTemplate(prev => ({
+          ...prev,
+          width: savedEditorState.templateWidth!,
+          height: savedEditorState.templateHeight!,
+        }));
+      }
       console.log('[print] エディター状態を読み込みました:', savedEditorState.elements.length, '要素');
     }
 
@@ -172,8 +181,8 @@ function PrintContent() {
     return () => window.removeEventListener('resize', updateScale);
   }, []);
 
-  // --- レイアウト計算 ---
-  const templateSize = TEMPLATE_SIZES[templateId] || { width: template.width, height: template.height, name: template.name };
+  // --- レイアウト計算（エディタで変更されたカスタムサイズを使用） ---
+  const templateSize: TemplateSize = { width: template.width, height: template.height, name: template.name };
   const paper: PaperSize = PAPER_SIZES[paperSize];
 
   const layout: LayoutResult = useMemo(() => {
