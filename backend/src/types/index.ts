@@ -96,7 +96,13 @@ export interface SelectedProduct {
   product_name: string;
   price: number;
   tax_rate?: number;
+  tax_division?: '0' | '1' | '2';
   category_name?: string;
+  category_id?: string;
+  group_code?: string;
+  maker?: string;
+  description?: string;
+  tag?: string;
   image_url?: string;
 }
 
