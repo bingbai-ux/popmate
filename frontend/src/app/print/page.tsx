@@ -510,9 +510,10 @@ function PrintContent() {
                       /* 画面表示: 縮小 */
                       transform: `scale(${previewScale})`,
                       transformOrigin: 'top center',
-                      marginBottom: `calc(-297mm * (1 - ${previewScale}) + 20px)`,
+                      marginBottom: `calc(-${paper.height}mm * (1 - ${previewScale}) + 20px)`,
                       boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-                      margin: '0 auto',
+                      marginLeft: 'auto',
+                      marginRight: 'auto',
                     } : {
                       /* 非表示ページ: transform は設定するが visibility: hidden で隠す */
                       transform: `scale(${previewScale})`,
