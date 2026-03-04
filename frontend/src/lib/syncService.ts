@@ -330,7 +330,13 @@ class SyncService {
         product_name: p.productName,
         price: p.price,
         tax_rate: p.taxRate,
+        tax_division: p.taxDivision,
         category_name: p.categoryName,
+        category_id: p.categoryId,
+        group_code: p.groupCode,
+        maker: p.maker,
+        description: p.description,
+        tag: p.tag,
       })) || [],
       print_settings: {
         paper_size: 'A4',
@@ -430,7 +436,13 @@ class SyncService {
       product_name: string;
       price: number;
       tax_rate?: number;
+      tax_division?: '0' | '1' | '2';
       category_name?: string;
+      category_id?: string;
+      group_code?: string;
+      maker?: string;
+      description?: string;
+      tag?: string;
     }> | undefined;
 
     // テンプレート情報: design_data内のメタ情報を優先、なければAPIフィールドから復元
@@ -456,7 +468,13 @@ class SyncService {
         productName: p.product_name,
         price: p.price,
         taxRate: p.tax_rate,
+        taxDivision: p.tax_division || '1',
         categoryName: p.category_name,
+        categoryId: p.category_id || '',
+        groupCode: p.group_code || '',
+        maker: p.maker || '',
+        description: p.description || '',
+        tag: p.tag,
       })) as SavedProject['selectedProducts'] || [],
       taxSettings: (designData?.taxSettings as SavedProject['taxSettings']) || {
         enabled: true,
