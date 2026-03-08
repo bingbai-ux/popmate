@@ -160,13 +160,27 @@ export default function ManualPage() {
               headers={['要素', '説明']}
               rows={[
                 ['テキスト', '文字を追加。商品名や価格を表示するのに使います'],
-                ['画像', '画像ファイルをアップロードして配置'],
+                ['画像', '画像ファイルをアップロードして配置（全POPに共通の画像）'],
+                ['商品画像', '商品ごとに異なる画像を設定できる画像枠を配置'],
                 ['図形', '四角形、角丸四角形、円、三角形、星'],
                 ['線', '直線や矢印付きの線'],
                 ['バーコード', '商品コードからバーコードを自動生成（CODE128, EAN13 等）'],
                 ['QRコード', '商品コードやURLからQRコードを自動生成'],
               ]}
             />
+
+            <h4 className="font-bold text-gray-700 mt-6 mb-2">「画像」と「商品画像」の違い</h4>
+            <Table
+              headers={['種類', 'ボタンの色', '動作', '用途']}
+              rows={[
+                ['画像', 'グレー', '1枚の画像を全POPに共通で表示', 'ロゴ、装飾イラストなど'],
+                ['商品画像', '緑', '商品ごとに異なる画像を設定可能', '商品写真、個別画像など'],
+              ]}
+            />
+            <p className="text-gray-600 mb-3">
+              「商品画像」を配置すると、デザイン上に緑色の点線枠が表示されます。
+              実際の画像は次のStep 5（編集画面）で商品ごとにアップロードします。
+            </p>
 
             <h4 className="font-bold text-gray-700 mt-6 mb-3">プレースホルダー</h4>
             <p className="text-gray-600 mb-3">テキスト要素やバーコード・QRコードに入力すると、プレビュー・印刷時に自動で商品情報に置き換わります。</p>
@@ -285,6 +299,22 @@ export default function ManualPage() {
               <li><strong>列幅の調整</strong>: ヘッダー境界をドラッグして列幅変更</li>
               <li><strong>リアルタイム反映</strong>: 編集するとすぐにプレビューに反映</li>
             </ol>
+
+            <h4 className="font-bold text-gray-700 mb-2">商品画像の設定</h4>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+              <p className="text-gray-700 mb-3">
+                デザインに「商品画像」枠が含まれている場合、テーブルに「商品画像」列が自動表示されます。
+              </p>
+              <Table
+                headers={['操作', '説明']}
+                rows={[
+                  ['「画像を追加」ボタン', '商品ごとに画像ファイルをアップロード'],
+                  ['「変更」ボタン', 'アップロード済みの画像を別の画像に差し替え'],
+                  ['「削除」ボタン', '設定した画像を削除（印刷時にその枠は非表示になります）'],
+                ]}
+              />
+              <Tip>商品画像は商品ごとに個別に設定できます。画像を設定していない商品では、その枠は印刷時に非表示になります。</Tip>
+            </div>
 
             <h4 className="font-bold text-gray-700 mb-2">AI要約機能</h4>
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
@@ -458,6 +488,14 @@ export default function ManualPage() {
               <FAQ q="用紙サイズを変えたい">
                 <p>印刷画面の「用紙サイズ」で A4、A3、B4、B5 から選択できます。1ページあたりの面数は自動計算されます。</p>
               </FAQ>
+              <FAQ q="商品ごとに違う画像を貼り付けたい">
+                <ul className="list-disc list-inside space-y-1">
+                  <li>デザイン画面のツールバーで緑色の「商品画像」ボタンをクリックして画像枠を配置</li>
+                  <li>編集画面（Step 5）の商品テーブルに「商品画像」列が表示される</li>
+                  <li>各商品の「画像を追加」ボタンから個別に画像をアップロード</li>
+                  <li>※ 通常の「画像」ボタンで追加した画像は全POPに共通で表示されます</li>
+                </ul>
+              </FAQ>
               <FAQ q="縦書きのテキストを入れたい">
                 <p>テキスト要素を選択し、プロパティパネルの「書字方向」で「縦書き」を選択してください。</p>
               </FAQ>
@@ -467,7 +505,7 @@ export default function ManualPage() {
           {/* フッター */}
           <div className="mt-12 pt-6 border-t border-gray-200 text-center text-sm text-gray-400">
             <p><strong>ポップメイト</strong> - スマレジ連携プライスポップ作成ツール</p>
-            <p>最終更新: 2026年2月</p>
+            <p>最終更新: 2026年3月</p>
           </div>
         </article>
       </div>
