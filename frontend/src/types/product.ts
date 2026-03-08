@@ -13,6 +13,7 @@ export interface Product {
   maker: string;           // メーカー名（groupCodeからマッピング）
   taxDivision: '0' | '1' | '2';  // 税区分 (0:税込, 1:税抜, 2:非課税)
   taxRate: number;         // 計算済み税率 (8 or 10)
+  productImageUrl?: string;  // 商品画像（data URL）- 商品ごとに設定可能
 }
 
 export interface Category {

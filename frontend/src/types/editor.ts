@@ -102,6 +102,7 @@ export interface ImageElement extends BaseElement {
   src: string;
   alt: string;
   opacity: number;
+  isDynamic?: boolean;  // true の場合、商品ごとに差し替え可能な画像枠
 }
 
 // 図形要素

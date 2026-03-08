@@ -10,6 +10,7 @@ import { SaveType } from '@/types/project';
 import { Product } from '@/types/product';
 import {
   EditorElement,
+  ImageElement,
   TemplateConfig,
   TaxSettings,
   DEFAULT_TAX_SETTINGS,
@@ -413,16 +414,21 @@ function PrintContent() {
           }
 
           if (processedElement.type === 'image') {
+            const imgEl = processedElement as ImageElement;
+            // 動的画像で画像未設定の場合は非表示
+            if (imgEl.isDynamic && !imgEl.src) {
+              return null;
+            }
             return (
               <img
                 key={processedElement.id}
-                src={processedElement.src}
-                alt={processedElement.alt}
+                src={imgEl.src}
+                alt={imgEl.alt}
                 style={{
                   position: 'absolute',
                   left, top, width, height,
                   objectFit: 'contain',
-                  opacity: processedElement.opacity / 100,
+                  opacity: imgEl.opacity / 100,
                 }}
               />
             );
