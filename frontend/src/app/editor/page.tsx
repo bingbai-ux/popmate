@@ -306,7 +306,7 @@ function EditorContent() {
     addElement(newElement);
   }, [elements.length, addElement]);
 
-  // 画像追加
+  // 画像追加（共通画像）
   const handleAddImage = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -333,6 +333,23 @@ function EditorContent() {
       }
     };
     input.click();
+  }, [elements.length, addElement]);
+
+  // 商品画像枠を追加（商品ごとに差し替え可能）
+  const handleAddProductImage = useCallback(() => {
+    const newElement: ImageElement = {
+      id: `product-image-${Date.now()}`,
+      type: 'image',
+      position: { x: 10, y: 10 },
+      size: { width: 25, height: 25 },
+      rotation: 0,
+      zIndex: elements.length + 1,
+      src: '',
+      alt: '商品画像',
+      opacity: 100,
+      isDynamic: true,
+    };
+    addElement(newElement);
   }, [elements.length, addElement]);
 
   // 図形追加
@@ -591,6 +608,7 @@ function EditorContent() {
         <EditorToolbar
         onAddText={handleAddText}
         onAddImage={handleAddImage}
+        onAddProductImage={handleAddProductImage}
         onAddShape={handleAddShape}
         onAddLine={handleAddLine}
         onAddBarcode={handleAddBarcode}

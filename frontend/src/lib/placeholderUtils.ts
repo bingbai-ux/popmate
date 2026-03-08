@@ -1,5 +1,5 @@
 import { Product } from '@/types/product';
-import { TaxSettings, EditorElement, TextElement } from '@/types/editor';
+import { TaxSettings, EditorElement, TextElement, ImageElement } from '@/types/editor';
 import { estimateTextCapacity } from './textUtils';
 
 /**
@@ -102,6 +102,12 @@ export function replaceElementPlaceholders(
 
   if (cloned.type === 'text' && cloned.content) {
     cloned.content = replacePlaceholders(cloned.content, product, taxSettings);
+  }
+  if (cloned.type === 'image' && (cloned as ImageElement).isDynamic) {
+    // 動的画像: 商品ごとの画像URLで差し替え
+    if (product.productImageUrl) {
+      (cloned as ImageElement).src = product.productImageUrl;
+    }
   }
   if (cloned.type === 'barcode' && cloned.settings?.value) {
     cloned.settings.value = replacePlaceholders(cloned.settings.value, product, taxSettings);
@@ -230,6 +236,11 @@ export async function replaceElementPlaceholdersWithSummarize(
     }
   }
 
+  if (cloned.type === 'image' && (cloned as ImageElement).isDynamic) {
+    if (product.productImageUrl) {
+      (cloned as ImageElement).src = product.productImageUrl;
+    }
+  }
   if (cloned.type === 'barcode' && (cloned as any).settings?.value) {
     (cloned as any).settings.value = replacePlaceholders((cloned as any).settings.value, product, taxSettings);
   }
@@ -268,6 +279,7 @@ export const PLACEHOLDER_COLUMN_MAP: Record<string, { key: string; label: string
   '{{taxRateNumber}}': { key: 'taxRate', label: '税率' },
   '{{category}}': { key: 'category', label: 'カテゴリ' },
   '{{productCode}}': { key: 'productCode', label: '商品コード' },
+  '{{productImage}}': { key: 'productImage', label: '商品画像' },
 };
 
 /**
@@ -283,6 +295,10 @@ export function detectUsedPlaceholders(elements: EditorElement[]): string[] {
       if (matches) {
         matches.forEach(m => usedPlaceholders.add(m));
       }
+    }
+    // 動的画像（商品画像枠）
+    if (element.type === 'image' && (element as ImageElement).isDynamic) {
+      usedPlaceholders.add('{{productImage}}');
     }
     // バーコード・QRコードも対応
     if ((element as any).settings?.value) {

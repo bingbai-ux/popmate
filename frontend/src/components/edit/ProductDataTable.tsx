@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Product } from '@/types/product';
-import { EditorElement } from '@/types/editor';
+import { EditorElement, ImageElement } from '@/types/editor';
 import { getUsedColumns, calculateTaxIncludedPrice, formatPriceNumber } from '@/lib/placeholderUtils';
 
 interface ProductDataTableProps {
@@ -39,6 +39,12 @@ export function ProductDataTable({
     [elements]
   );
   const showSummarizeColumn = hasDescription && !!summarizeFlags && !!onToggleSummarize;
+
+  // テンプレートに動的画像（商品画像枠）が含まれるかチェック
+  const hasDynamicImage = useMemo(() =>
+    elements.some(el => el.type === 'image' && (el as ImageElement).isDynamic),
+    [elements]
+  );
 
   // 全選択チェックボックスの状態
   const allSummarizeEnabled = summarizeFlags?.every(Boolean) ?? true;
@@ -123,6 +129,7 @@ export function ProductDataTable({
       case 'taxRate': return `${product.taxRate || 10}%`;
       case 'category': return product.categoryName || '';
       case 'productCode': return product.productCode || '';
+      case 'productImage': return product.productImageUrl || '';
       default: return '';
     }
   }, [getTaxIncludedPrice]);
@@ -133,6 +140,33 @@ export function ProductDataTable({
   const handleCellEdit = useCallback((index: number, key: string, value: string) => {
     if (onEditProduct && isEditable(key)) {
       onEditProduct(index, key, value);
+    }
+  }, [onEditProduct]);
+
+  // 商品画像アップロード
+  const handleImageUpload = useCallback((index: number) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (onEditProduct) {
+            onEditProduct(index, 'productImageUrl', event.target?.result as string);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
+  }, [onEditProduct]);
+
+  // 商品画像削除
+  const handleImageRemove = useCallback((index: number) => {
+    if (onEditProduct) {
+      onEditProduct(index, 'productImageUrl', '');
     }
   }, [onEditProduct]);
 
@@ -245,7 +279,44 @@ export function ProductDataTable({
                     key={col.key}
                     className="px-3 py-2 text-sm text-left border-b border-gray-100 overflow-hidden"
                   >
-                    {isEditable(col.key) && onEditProduct ? (
+                    {col.key === 'productImage' ? (
+                      // 商品画像セル
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        {product.productImageUrl ? (
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={product.productImageUrl}
+                              alt="商品画像"
+                              className="w-8 h-8 object-contain rounded border border-gray-200"
+                            />
+                            <button
+                              onClick={() => handleImageUpload(index)}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                              title="画像を変更"
+                            >
+                              変更
+                            </button>
+                            <button
+                              onClick={() => handleImageRemove(index)}
+                              className="text-xs text-red-500 hover:text-red-700"
+                              title="画像を削除"
+                            >
+                              削除
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleImageUpload(index)}
+                            className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-blue-600 border border-dashed border-gray-300 hover:border-blue-400 rounded transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            画像を追加
+                          </button>
+                        )}
+                      </div>
+                    ) : isEditable(col.key) && onEditProduct ? (
                       isExpanded ? (
                         <textarea
                           value={col.key === 'price' ? String(product.price) : getCellValue(product, col.key)}
