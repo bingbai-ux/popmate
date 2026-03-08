@@ -2,6 +2,7 @@
 // 選択商品の保存・復元（sessionStorage使用）
 
 import type { Product } from '@/types/product';
+import { getProductKey, getProductImage } from './productImageStore';
 
 const STORAGE_KEY = 'popmate_selected_products';
 
@@ -13,11 +14,21 @@ interface SelectedProductsState {
 
 /**
  * 選択商品を保存
+ * 注意: productImageUrl（base64画像）は非常に大きいため sessionStorage には保存しない。
+ * 画像データは productImageStore（メモリ）で管理される。
  */
 export function saveSelectedProducts(products: Product[], templateId: string): void {
   try {
+    // 画像データを除外して保存（sessionStorage容量制限対策）
+    const productsWithoutImages = products.map(p => {
+      if (p.productImageUrl) {
+        const { productImageUrl: _, ...rest } = p;
+        return rest as Product;
+      }
+      return p;
+    });
     const state: SelectedProductsState = {
-      products,
+      products: productsWithoutImages,
       templateId,
       updatedAt: Date.now(),
     };
@@ -29,7 +40,7 @@ export function saveSelectedProducts(products: Product[], templateId: string): v
 }
 
 /**
- * 選択商品を復元
+ * 選択商品を復元（メモリストアから画像データも復元）
  */
 export function loadSelectedProducts(templateId: string): Product[] | null {
   try {
@@ -52,8 +63,18 @@ export function loadSelectedProducts(templateId: string): Product[] | null {
       return null;
     }
 
-    console.log('[selectedProductsStorage] 選択商品を復元しました:', state.products.length, '件');
-    return state.products;
+    // メモリストアから画像データを復元
+    const productsWithImages = state.products.map(p => {
+      const key = getProductKey(p);
+      const imageUrl = getProductImage(key);
+      if (imageUrl) {
+        return { ...p, productImageUrl: imageUrl };
+      }
+      return p;
+    });
+
+    console.log('[selectedProductsStorage] 選択商品を復元しました:', productsWithImages.length, '件');
+    return productsWithImages;
   } catch (error) {
     console.error('[selectedProductsStorage] 復元エラー:', error);
     return null;

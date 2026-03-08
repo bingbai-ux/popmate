@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Product } from '@/types/product';
 import { EditorElement, ImageElement } from '@/types/editor';
 import { getUsedColumns, calculateTaxIncludedPrice, formatPriceNumber } from '@/lib/placeholderUtils';
+import { setProductImage, getProductImage, getProductKey, compressImage } from '@/lib/productImageStore';
 
 interface ProductDataTableProps {
   products: Product[];
@@ -143,8 +144,11 @@ export function ProductDataTable({
     }
   }, [onEditProduct]);
 
-  // 商品画像アップロード
+  // 商品画像アップロード（圧縮してメモリストアに保存）
   const handleImageUpload = useCallback((index: number) => {
+    const product = products[index];
+    if (!product) return;
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
@@ -152,23 +156,34 @@ export function ProductDataTable({
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
+          const rawDataUrl = event.target?.result as string;
+          // 画像を圧縮（最大600px, JPEG 80%）
+          const compressed = await compressImage(rawDataUrl);
+          const key = getProductKey(product);
+          // メモリストアに保存
+          setProductImage(key, compressed);
+          // Product の productImageUrl も更新（プレビューやプレースホルダー置換で使用）
           if (onEditProduct) {
-            onEditProduct(index, 'productImageUrl', event.target?.result as string);
+            onEditProduct(index, 'productImageUrl', compressed);
           }
         };
         reader.readAsDataURL(file);
       }
     };
     input.click();
-  }, [onEditProduct]);
+  }, [products, onEditProduct]);
 
   // 商品画像削除
   const handleImageRemove = useCallback((index: number) => {
+    const product = products[index];
+    if (!product) return;
+    const key = getProductKey(product);
+    setProductImage(key, '');
     if (onEditProduct) {
       onEditProduct(index, 'productImageUrl', '');
     }
-  }, [onEditProduct]);
+  }, [products, onEditProduct]);
 
   if (products.length === 0) {
     return <div className="text-center py-8 text-gray-500">商品データがありません</div>;
