@@ -84,6 +84,30 @@ function EditContent() {
       }
       console.log('[edit] エディター状態を読み込みました:', savedEditorState.elements.length, '要素');
     } else {
+      // フォールバック: currentProject（保存プロジェクト）から要素を復元
+      let restoredFromProject = false;
+      try {
+        const currentProjectJson = sessionStorage.getItem('currentProject');
+        if (currentProjectJson) {
+          const currentProject = JSON.parse(currentProjectJson);
+          if (currentProject.elements && currentProject.elements.length > 0) {
+            setElements(currentProject.elements as EditorElement[]);
+            if (currentProject.template?.width && currentProject.template?.height) {
+              setTemplate(prev => ({
+                ...prev,
+                width: currentProject.template.width,
+                height: currentProject.template.height,
+              }));
+            }
+            console.log('[edit] currentProjectから要素を復元しました:', currentProject.elements.length, '要素');
+            restoredFromProject = true;
+          }
+        }
+      } catch (e) {
+        console.error('[edit] currentProjectの復元に失敗:', e);
+      }
+
+      if (!restoredFromProject) {
       // デフォルト要素を設定
       setElements([
         {
@@ -117,6 +141,7 @@ function EditContent() {
           style: { ...DEFAULT_TEXT_STYLE, fontSize: 10, color: '#6B7280' },
         },
       ]);
+      }
     }
 
     // 税設定を復元
