@@ -8,6 +8,7 @@ import ProjectGrid from '@/components/saved/ProjectGrid';
 import { SavedProject } from '@/types/project';
 import { getSavedProjects, deleteProject, duplicateProject } from '@/lib/projectStorage';
 import { saveSelectedProducts } from '@/lib/selectedProductsStorage';
+import { saveEditorState } from '@/lib/editorStorage';
 import { syncService } from '@/lib/syncService';
 import { getUserId } from '@/lib/userIdentity';
 
@@ -54,11 +55,21 @@ export default function SavedPage() {
   // プロジェクト選択 → 編集画面（Step 4）から再開
   const handleSelect = (project: SavedProject) => {
     sessionStorage.setItem('currentProject', JSON.stringify(project));
-    sessionStorage.setItem('editorElements', JSON.stringify(project.elements));
-    sessionStorage.setItem('selectedProducts', JSON.stringify(project.selectedProducts));
     sessionStorage.setItem('taxSettings', JSON.stringify(project.taxSettings));
     if (project.editedProductData) {
       sessionStorage.setItem('editedProductData', JSON.stringify(project.editedProductData));
+    }
+    // エディター状態を正しいキー（popmate_editor_state）で保存
+    if (project.elements && project.elements.length > 0) {
+      saveEditorState({
+        elements: project.elements,
+        templateId: project.template.id,
+        templateName: project.template.name,
+        templateWidth: project.template.width,
+        templateHeight: project.template.height,
+        zoom: 1,
+        roundingMethod: project.taxSettings?.roundingMode || 'floor',
+      });
     }
     // 商品データも復元
     if (project.selectedProducts && project.selectedProducts.length > 0) {
