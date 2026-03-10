@@ -228,11 +228,32 @@ export const DEFAULT_TAX_SETTINGS: TaxSettings = {
 
 // プレースホルダー一覧（表示順: 商品コード、カテゴリー、メーカー名、商品名、価格、税込価格、商品説明）
 export const PLACEHOLDERS = [
-  { key: '{{productCode}}', label: '商品コード' },
-  { key: '{{category}}', label: 'カテゴリー' },
-  { key: '{{maker}}', label: 'メーカー名' },
-  { key: '{{productName}}', label: '商品名' },
-  { key: '{{price}}', label: '価格（税抜）' },
-  { key: '{{taxIncludedPrice}}', label: '税込価格' },
-  { key: '{{description}}', label: '商品説明' },
+  { key: '{{productCode}}', label: '商品コード', shortLabel: 'コード' },
+  { key: '{{category}}', label: 'カテゴリー', shortLabel: 'カテゴリ' },
+  { key: '{{maker}}', label: 'メーカー名', shortLabel: 'メーカー' },
+  { key: '{{productName}}', label: '商品名', shortLabel: '商品名' },
+  { key: '{{price}}', label: '価格（税抜）', shortLabel: 'P' },
+  { key: '{{taxIncludedPrice}}', label: '税込価格', shortLabel: 'TP' },
+  { key: '{{description}}', label: '商品説明', shortLabel: '説明' },
 ];
+
+/**
+ * プレースホルダーをキャンバス表示用の短縮形に変換するマップ
+ * 例: {{price}} → {{P}}, {{taxIncludedPrice}} → {{TP}}
+ */
+export const PLACEHOLDER_DISPLAY_MAP: Record<string, string> = Object.fromEntries(
+  PLACEHOLDERS.map(p => [p.key, `{{${p.shortLabel}}}`])
+);
+
+/**
+ * テキスト内のプレースホルダーをキャンバス表示用の短縮形に変換
+ */
+export function toDisplayText(content: string): string {
+  let display = content;
+  for (const p of PLACEHOLDERS) {
+    if (p.key !== `{{${p.shortLabel}}}`) {
+      display = display.replaceAll(p.key, `{{${p.shortLabel}}}`);
+    }
+  }
+  return display;
+}
