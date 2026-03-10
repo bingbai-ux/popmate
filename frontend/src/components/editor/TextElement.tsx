@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { TextElement as TextElementType } from '@/types/editor';
+import { TextElement as TextElementType, toDisplayText } from '@/types/editor';
 
 interface TextElementProps {
   element: TextElementType;
@@ -267,10 +267,10 @@ export default function TextElement({
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        // 表示モード
+        // 表示モード（プレースホルダーは短縮表示）
         <div style={containerStyle}>
           <div style={textStyle}>
-            {element.content || (
+            {element.content ? toDisplayText(element.content) : (
               <span className="text-gray-400 italic">ダブルクリックで編集</span>
             )}
           </div>

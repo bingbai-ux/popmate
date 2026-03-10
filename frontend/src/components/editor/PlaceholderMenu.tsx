@@ -24,8 +24,8 @@ export default function PlaceholderMenu({ onSelect, onClose }: PlaceholderMenuPr
             className="w-full px-3 py-2 text-left hover:bg-primary/5 transition-colors flex items-center justify-between"
           >
             <span className="text-sm text-gray-700">{item.label}</span>
-            <code className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
-              {item.key}
+            <code className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded" title={item.key}>
+              {`{{${item.shortLabel}}}`}
             </code>
           </button>
         ))}
