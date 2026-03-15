@@ -187,6 +187,11 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
         className="hidden"
       />
 
+      {/* 注意書き */}
+      <p className="text-xs text-gray-400">
+        ※ CSVには商品コード（JANCODE）を記載してください
+      </p>
+
       {/* ボタン行: ボタン + 結果メッセージを横並び */}
       <div className="flex items-center gap-2">
         <button
@@ -231,11 +236,6 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
           </span>
         )}
       </div>
-
-      {/* 注意書き */}
-      <p className="text-xs text-gray-400">
-        ※ CSVには商品コード（JANCODE）を記載してください
-      </p>
 
       {/* 見つからなかったJANCODE一覧（折りたたみ） */}
       {result && result.notFoundCodes.length > 0 && (
