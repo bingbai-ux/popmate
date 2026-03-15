@@ -10,6 +10,7 @@ import ProductTable from '@/components/data-select/ProductTable';
 import SelectedProductsSidebar from '@/components/data-select/SelectedProductsSidebar';
 import CsvJancodeImport from '@/components/data-select/CsvJancodeImport';
 import { Product, Category } from '@/types/product';
+import { FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
 import { searchProducts, fetchCategoriesWithId, fetchProductFilters } from '@/lib/api';
 import { saveSelectedProducts, loadSelectedProducts } from '@/lib/selectedProductsStorage';
 
@@ -32,6 +33,10 @@ function DataSelectContent() {
 
   // ─── 選択済み商品（検索をまたいで保持） ───
   const [selectedProducts, setSelectedProducts] = useState<Map<string, Product>>(new Map());
+
+  // ─── CSVフィールド切り替え ───
+  const [fieldToggleState, setFieldToggleState] = useState<FieldToggleState>({});
+  const [csvFieldMap, setCsvFieldMap] = useState<CsvFieldMap>({});
 
   const selectedIds = Array.from(selectedProducts.keys());
   const selectedProductsList = Array.from(selectedProducts.values());
@@ -140,8 +145,12 @@ function DataSelectContent() {
     setSelectedProducts(new Map());
   }, []);
 
-  // CSV一括選択: 追加マージ（既存選択を上書きしない）
-  const handleCsvImportComplete = useCallback((products: Product[]) => {
+  // CSV一括選択: 追加マージ（既存選択を上書きしない）+ フィールドトグル状態保持
+  const handleCsvImportComplete = useCallback((
+    products: Product[],
+    toggleState: FieldToggleState,
+    newCsvFieldMap: CsvFieldMap
+  ) => {
     setSelectedProducts(prev => {
       const next = new Map(prev);
       products.forEach(p => {
@@ -151,6 +160,13 @@ function DataSelectContent() {
       });
       return next;
     });
+    // フィールドトグル状態とCSVフィールドマップを保持
+    if (Object.keys(toggleState).length > 0) {
+      setFieldToggleState(toggleState);
+    }
+    if (Object.keys(newCsvFieldMap).length > 0) {
+      setCsvFieldMap(prev => ({ ...prev, ...newCsvFieldMap }));
+    }
   }, []);
 
   const handleNext = () => {
@@ -245,6 +261,8 @@ function DataSelectContent() {
                 onToggleSelect={handleToggleSelect}
                 onSelectAll={handleSelectAll}
                 isLoading={isLoading}
+                fieldToggleState={fieldToggleState}
+                csvFieldMap={csvFieldMap}
               />
             )}
           </div>
@@ -254,6 +272,8 @@ function DataSelectContent() {
           products={selectedProductsList}
           onRemove={handleRemoveSelected}
           onClearAll={handleClearAll}
+          fieldToggleState={fieldToggleState}
+          csvFieldMap={csvFieldMap}
         />
       </div>
     </>
