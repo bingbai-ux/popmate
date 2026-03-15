@@ -2,11 +2,13 @@
 // 選択商品の保存・復元（sessionStorage使用）
 
 import type { Product } from '@/types/product';
+import type { EditorElement } from '@/types/editor';
 import type { CsvFieldMap, FieldToggleState } from '@/types/csvFieldToggle';
 import { getProductKey, getProductImage } from './productImageStore';
 
 const STORAGE_KEY = 'popmate_selected_products';
 const CSV_STORAGE_KEY = 'popmate_csv_field_data';
+const PROCESSED_ELEMENTS_KEY = 'popmate_processed_elements';
 
 interface SelectedProductsState {
   products: Product[];
@@ -98,6 +100,36 @@ export function clearSelectedProducts(): void {
     console.log('[selectedProductsStorage] 選択商品をクリアしました');
   } catch (error) {
     console.error('[selectedProductsStorage] クリアエラー:', error);
+  }
+}
+
+/**
+ * AI処理済み要素マップを保存（editページ → printページ受け渡し用）
+ * Map<productKey, EditorElement[]> を JSON化して sessionStorage に保存
+ */
+export function saveProcessedElements(map: Map<string, EditorElement[]>): void {
+  try {
+    const serialized = JSON.stringify([...map]);
+    sessionStorage.setItem(PROCESSED_ELEMENTS_KEY, serialized);
+    console.log('[selectedProductsStorage] 処理済み要素を保存しました:', map.size, '件');
+  } catch (error) {
+    console.error('[selectedProductsStorage] 処理済み要素の保存エラー:', error);
+  }
+}
+
+/**
+ * AI処理済み要素マップを復元
+ */
+export function loadProcessedElements(): Map<string, EditorElement[]> | null {
+  try {
+    const saved = sessionStorage.getItem(PROCESSED_ELEMENTS_KEY);
+    if (!saved) return null;
+    const map = new Map<string, EditorElement[]>(JSON.parse(saved));
+    console.log('[selectedProductsStorage] 処理済み要素を復元しました:', map.size, '件');
+    return map;
+  } catch (error) {
+    console.error('[selectedProductsStorage] 処理済み要素の復元エラー:', error);
+    return null;
   }
 }
 

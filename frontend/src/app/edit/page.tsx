@@ -18,9 +18,10 @@ import {
   DEFAULT_TEXT_STYLE,
 } from '@/types/editor';
 import { getTemplateById } from '@/types/template';
-import { loadSelectedProducts, saveSelectedProducts, loadCsvFieldData, saveCsvFieldData } from '@/lib/selectedProductsStorage';
+import { loadSelectedProducts, saveSelectedProducts, loadCsvFieldData, saveCsvFieldData, saveProcessedElements } from '@/lib/selectedProductsStorage';
 import { loadEditorState } from '@/lib/editorStorage';
 import { FieldToggleState, CsvFieldMap, applyCsvOverrides } from '@/types/csvFieldToggle';
+import { replaceAllElementsWithSummarize, replaceElementPlaceholders } from '@/lib/placeholderUtils';
 
 function EditContent() {
   const searchParams = useSearchParams();
@@ -42,6 +43,8 @@ function EditContent() {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [summarizeFlags, setSummarizeFlags] = useState<boolean[]>([]);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [prepareProgress, setPrepareProgress] = useState({ current: 0, total: 0 });
 
   // ─── CSVフィールド切り替え ───
   const [fieldToggleState, setFieldToggleState] = useState<FieldToggleState>({});
@@ -245,21 +248,65 @@ function EditContent() {
           {/* ★ 「保存」ボタン削除 — 保存は印刷画面で行う */}
           {/* ★ 「印刷へ進む」を青ボタンに変更 */}
           <button
-            onClick={() => {
+            onClick={async () => {
               // 印刷前にデータを保存
               saveSelectedProducts(products, templateId);
               saveCsvFieldData(csvFieldMap, fieldToggleState, templateId);
               sessionStorage.setItem('taxSettings', JSON.stringify(taxSettings));
               sessionStorage.setItem('summarizeFlags', JSON.stringify(summarizeFlags));
+
+              // 全商品のAI処理を一括実行してsessionStorageに保存
+              setIsPreparing(true);
+              setPrepareProgress({ current: 0, total: products.length });
+              try {
+                const processedMap = new Map<string, EditorElement[]>();
+                for (let i = 0; i < products.length; i++) {
+                  const product = applyCsvOverrides(products[i], csvFieldMap, fieldToggleState);
+                  const key = product.productId || product.productCode || product.productName;
+                  const shouldSummarize = summarizeFlags[i] ?? true;
+
+                  if (shouldSummarize) {
+                    try {
+                      const processed = await replaceAllElementsWithSummarize(elements, product, taxSettings);
+                      processedMap.set(key, processed);
+                    } catch {
+                      const fallback = elements.map(el => replaceElementPlaceholders(el, product, taxSettings));
+                      processedMap.set(key, fallback);
+                    }
+                  } else {
+                    const replaced = elements.map(el => replaceElementPlaceholders(el, product, taxSettings));
+                    processedMap.set(key, replaced);
+                  }
+                  setPrepareProgress({ current: i + 1, total: products.length });
+                }
+                saveProcessedElements(processedMap);
+              } catch (error) {
+                console.error('[edit] 印刷データ準備エラー:', error);
+              } finally {
+                setIsPreparing(false);
+              }
+
               router.push(`/print?template=${templateId}`);
             }}
-            disabled={products.length === 0}
+            disabled={products.length === 0 || isPreparing}
             className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-            印刷へ進む ({products.length}件)
+            {isPreparing ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                テキスト最適化中... ({prepareProgress.current}/{prepareProgress.total})
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                印刷へ進む ({products.length}件)
+              </>
+            )}
           </button>
         </div>
       </div>

@@ -145,9 +145,27 @@ async function summarizeText(text: string, maxChars: number): Promise<string> {
 }
 
 /**
- * 商品説明の要約結果をキャッシュ
+ * 商品説明の要約結果をキャッシュ（sessionStorage永続化）
+ * editページで要約した結果をprintページでそのまま再利用するため、
+ * ページ遷移をまたいで保持する。
  */
-const summaryCache = new Map<string, string>();
+const SUMMARY_CACHE_KEY = 'popmate_summary_cache';
+
+function loadSummaryCache(): Map<string, string> {
+  try {
+    const saved = sessionStorage.getItem(SUMMARY_CACHE_KEY);
+    if (saved) return new Map(JSON.parse(saved));
+  } catch {}
+  return new Map();
+}
+
+function saveSummaryCache(cache: Map<string, string>): void {
+  try {
+    sessionStorage.setItem(SUMMARY_CACHE_KEY, JSON.stringify([...cache]));
+  } catch {}
+}
+
+const summaryCache = loadSummaryCache();
 
 /**
  * 要素内のプレースホルダーを置換（商品説明の自動AI省略付き）
@@ -217,10 +235,12 @@ export async function replaceElementPlaceholdersWithSummarize(
 
         if (summaryCache.has(cacheKey)) {
           const cachedSummary = summaryCache.get(cacheKey)!;
+          console.log('[AI Summarize] cache hit:', cacheKey);
           textElement.content = textElement.content.replace(product.description, cachedSummary);
         } else {
           const summarized = await summarizeText(descriptionWithoutNewlines, descriptionTargetChars);
           summaryCache.set(cacheKey, summarized);
+          saveSummaryCache(summaryCache);
           textElement.content = textElement.content.replace(product.description, summarized);
         }
       } else {
