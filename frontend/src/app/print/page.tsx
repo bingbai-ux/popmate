@@ -16,7 +16,7 @@ import {
   DEFAULT_TAX_SETTINGS,
 } from '@/types/editor';
 import { getTemplateById } from '@/types/template';
-import { loadSelectedProducts, loadCsvFieldData } from '@/lib/selectedProductsStorage';
+import { loadSelectedProducts, loadCsvFieldData, loadProcessedElements } from '@/lib/selectedProductsStorage';
 import { loadEditorState } from '@/lib/editorStorage';
 import {
   calculateLayout,
@@ -25,7 +25,7 @@ import {
   type LayoutResult,
   type PaperSize,
 } from '@/lib/printLayout';
-import { replaceElementPlaceholders, replaceAllElementsWithSummarize } from '@/lib/placeholderUtils';
+import { replaceElementPlaceholders } from '@/lib/placeholderUtils';
 import { applyCsvOverrides, FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
 import { applyKinsoku } from '@/lib/textUtils';
 
@@ -144,45 +144,30 @@ function PrintContent() {
     return products.map(p => applyCsvOverrides(p, csvFieldMap, fieldToggleState));
   }, [products, csvFieldMap, fieldToggleState]);
 
-  // --- AI要約付きプレースホルダー置換 ---
+  // --- 処理済み要素の復元（editページで事前処理済み） ---
   useEffect(() => {
     if (!isLoaded || displayProducts.length === 0 || elements.length === 0) return;
 
-    let isCancelled = false;
-    setIsProcessingElements(true);
+    // editページで事前処理済みのデータを復元
+    const cached = loadProcessedElements();
+    if (cached && cached.size > 0) {
+      setProcessedElementsMap(cached);
+      setIsProcessingElements(false);
+      console.log('[print] 事前処理済みデータを使用:', cached.size, '件');
+      return;
+    }
 
-    const processAll = async () => {
-      const newMap = new Map<string, EditorElement[]>();
-      for (let i = 0; i < displayProducts.length; i++) {
-        if (isCancelled) return;
-        const product = displayProducts[i];
-        const key = product.productId || product.productCode || product.productName;
-        const shouldSummarize = summarizeFlags[i] ?? true;
-
-        if (shouldSummarize) {
-          try {
-            const processed = await replaceAllElementsWithSummarize(elements, product, taxSettings);
-            newMap.set(key, processed);
-          } catch (error) {
-            console.error('[print] AI要約処理エラー:', error);
-            const fallback = elements.map(el => replaceElementPlaceholders(el, product, taxSettings));
-            newMap.set(key, fallback);
-          }
-        } else {
-          // AI要約OFF → 通常の置換のみ
-          const replaced = elements.map(el => replaceElementPlaceholders(el, product, taxSettings));
-          newMap.set(key, replaced);
-        }
-      }
-      if (!isCancelled) {
-        setProcessedElementsMap(newMap);
-        setIsProcessingElements(false);
-      }
-    };
-
-    processAll();
-    return () => { isCancelled = true; };
-  }, [isLoaded, displayProducts, elements, taxSettings, summarizeFlags]);
+    // フォールバック: キャッシュがない場合のみプレースホルダー置換（AI要約なし）
+    console.log('[print] キャッシュなし、通常置換で表示');
+    const newMap = new Map<string, EditorElement[]>();
+    for (const product of displayProducts) {
+      const key = product.productId || product.productCode || product.productName;
+      const replaced = elements.map(el => replaceElementPlaceholders(el, product, taxSettings));
+      newMap.set(key, replaced);
+    }
+    setProcessedElementsMap(newMap);
+    setIsProcessingElements(false);
+  }, [isLoaded, displayProducts, elements, taxSettings]);
 
   // --- プレビュースケールの動的計算 ---
   useEffect(() => {
