@@ -12,7 +12,7 @@ import CsvJancodeImport from '@/components/data-select/CsvJancodeImport';
 import { Product, Category } from '@/types/product';
 import { FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
 import { searchProducts, fetchCategoriesWithId, fetchProductFilters } from '@/lib/api';
-import { saveSelectedProducts, loadSelectedProducts } from '@/lib/selectedProductsStorage';
+import { saveSelectedProducts, loadSelectedProducts, saveCsvFieldData, loadCsvFieldData } from '@/lib/selectedProductsStorage';
 
 function DataSelectContent() {
   const searchParams = useSearchParams();
@@ -81,6 +81,22 @@ function DataSelectContent() {
       saveSelectedProducts(Array.from(selectedProducts.values()), templateId);
     }
   }, [selectedProducts, templateId]);
+
+  // ─── CSVフィールドデータの自動保存 ───
+  useEffect(() => {
+    if (Object.keys(csvFieldMap).length > 0) {
+      saveCsvFieldData(csvFieldMap, fieldToggleState, templateId);
+    }
+  }, [csvFieldMap, fieldToggleState, templateId]);
+
+  // ─── CSVフィールドデータの復元 ───
+  useEffect(() => {
+    const savedCsvData = loadCsvFieldData(templateId);
+    if (savedCsvData) {
+      setCsvFieldMap(savedCsvData.csvFieldMap);
+      setFieldToggleState(savedCsvData.fieldToggleState);
+    }
+  }, [templateId]);
 
   // ─── 検索実行（選択は保持） ───
   const handleSearch = useCallback(async (filters: SearchFiltersType) => {

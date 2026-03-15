@@ -2,14 +2,22 @@
 // 選択商品の保存・復元（sessionStorage使用）
 
 import type { Product } from '@/types/product';
+import type { CsvFieldMap, FieldToggleState } from '@/types/csvFieldToggle';
 import { getProductKey, getProductImage } from './productImageStore';
 
 const STORAGE_KEY = 'popmate_selected_products';
+const CSV_STORAGE_KEY = 'popmate_csv_field_data';
 
 interface SelectedProductsState {
   products: Product[];
   templateId: string;
   updatedAt: number;
+}
+
+interface CsvFieldDataState {
+  csvFieldMap: CsvFieldMap;
+  fieldToggleState: FieldToggleState;
+  templateId: string;
 }
 
 /**
@@ -90,5 +98,44 @@ export function clearSelectedProducts(): void {
     console.log('[selectedProductsStorage] 選択商品をクリアしました');
   } catch (error) {
     console.error('[selectedProductsStorage] クリアエラー:', error);
+  }
+}
+
+/**
+ * CSVフィールドデータを保存（csvFieldMap + fieldToggleState）
+ */
+export function saveCsvFieldData(
+  csvFieldMap: CsvFieldMap,
+  fieldToggleState: FieldToggleState,
+  templateId: string
+): void {
+  try {
+    const state: CsvFieldDataState = { csvFieldMap, fieldToggleState, templateId };
+    sessionStorage.setItem(CSV_STORAGE_KEY, JSON.stringify(state));
+    console.log('[selectedProductsStorage] CSVフィールドデータを保存しました');
+  } catch (error) {
+    console.error('[selectedProductsStorage] CSVフィールドデータ保存エラー:', error);
+  }
+}
+
+/**
+ * CSVフィールドデータを復元
+ */
+export function loadCsvFieldData(templateId: string): {
+  csvFieldMap: CsvFieldMap;
+  fieldToggleState: FieldToggleState;
+} | null {
+  try {
+    const saved = sessionStorage.getItem(CSV_STORAGE_KEY);
+    if (!saved) return null;
+
+    const state: CsvFieldDataState = JSON.parse(saved);
+    if (state.templateId !== templateId) return null;
+
+    console.log('[selectedProductsStorage] CSVフィールドデータを復元しました');
+    return { csvFieldMap: state.csvFieldMap, fieldToggleState: state.fieldToggleState };
+  } catch (error) {
+    console.error('[selectedProductsStorage] CSVフィールドデータ復元エラー:', error);
+    return null;
   }
 }
