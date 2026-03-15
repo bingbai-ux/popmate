@@ -103,6 +103,11 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
       headerNames = rawColumns.map((name, i) =>
         i === jancodeColIndex ? '' : normalizeFieldName(name)
       );
+      console.log('=== CSV Headers ===', {
+        rawColumns,
+        normalizedHeaders: headerNames,
+        jancodeColIndex,
+      });
     } else if (lines[0].includes(',') && !/^\d+$/.test(lowerColumns[0])) {
       startRow = 1;
     }
@@ -140,6 +145,17 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
       const buffer = await file.arrayBuffer();
       const text = detectAndDecodeText(buffer);
       const csvRows = parseCsvRows(text);
+
+      // デバッグ: CSVパース結果
+      if (csvRows.length > 0) {
+        const sampleFields = csvRows[0].additionalFields;
+        console.log('=== CSV Parse Result ===', {
+          totalRows: csvRows.length,
+          sampleJancode: csvRows[0].jancode,
+          additionalFieldKeys: Object.keys(sampleFields),
+          sampleFields,
+        });
+      }
 
       if (csvRows.length === 0) {
         setError('CSVにJANCODEが含まれていません');

@@ -24,8 +24,19 @@ export const JANCODE_COLUMN_ALIASES = ['jancode', '商品コード', 'jan', 'ean
 /** CSVヘッダ名をフィールド名に正規化 */
 export function normalizeFieldName(header: string): string {
   const lower = header.toLowerCase().trim();
-  if (lower === 'price' || lower === '価格' || lower === '税抜価格' || lower === '税込価格') return 'price';
-  if (lower === 'description' || lower === '説明文' || lower === '説明' || lower === '商品説明') return 'description';
+  // 価格系（税抜き・税込み・売価・単価・定価 etc.）
+  const priceAliases = [
+    'price', '価格', '税抜価格', '税込価格',
+    '税抜き価格', '税込み価格', '売価', '単価', '定価',
+    '税抜', '税込', '本体価格', '販売価格',
+  ];
+  if (priceAliases.some(a => lower === a || lower.replace(/\s/g, '') === a)) return 'price';
+  // 説明系
+  const descriptionAliases = [
+    'description', '説明文', '説明', '商品説明',
+    '詳細', '商品詳細', '備考', 'コメント',
+  ];
+  if (descriptionAliases.some(a => lower === a)) return 'description';
   return header.trim();
 }
 
