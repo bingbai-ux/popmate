@@ -1,16 +1,30 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-
-export interface BulkSearchProduct {
-  productId: string;
-  productCode: string;
-  productName: string;
-}
+import { Product } from '@/types/product';
 
 interface CsvJancodeImportProps {
-  onImportComplete: (products: BulkSearchProduct[]) => void;
+  onImportComplete: (products: Product[]) => void;
   disabled?: boolean;
+}
+
+/** スマレジAPIレスポンスをProduct型に変換（api.tsと同じ税率ロジック） */
+function transformBulkProduct(p: any): Product {
+  const taxRate = p.reduceTaxId ? 8 : 10;
+  return {
+    productId: String(p.productId || ''),
+    productCode: String(p.productCode || ''),
+    productName: String(p.productName || ''),
+    price: Number(p.price) || 0,
+    categoryId: String(p.categoryId || ''),
+    categoryName: String(p.categoryName || ''),
+    groupCode: String(p.groupCode || ''),
+    description: String(p.description || ''),
+    tag: String(p.tag || ''),
+    maker: String(p.tag || ''),
+    taxDivision: (String(p.taxDivision || '1') as '0' | '1' | '2'),
+    taxRate,
+  };
 }
 
 interface ImportResult {
@@ -148,7 +162,8 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
         return;
       }
 
-      onImportComplete(data.found as BulkSearchProduct[]);
+      const products = (data.found as any[]).map(transformBulkProduct);
+      onImportComplete(products);
 
       setResult({
         foundCount: data.found.length,
@@ -163,7 +178,7 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
   }, [API_BASE, detectAndDecodeText, parseJancodesFromCsv, onImportComplete]);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="inline-flex flex-col items-start">
       <input
         ref={fileInputRef}
         type="file"
@@ -171,11 +186,10 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
         onChange={handleFileChange}
         className="hidden"
       />
-
       <button
         onClick={handleButtonClick}
         disabled={disabled || isLoading}
-        className="flex items-center gap-2 px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex items-center gap-2 px-4 py-2 text-sm border border-border text-gray-600 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
       >
         {isLoading ? (
           <>
@@ -183,21 +197,21 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <span>検索中... ({totalCount}件)</span>
+            <span>CSV取込中... ({totalCount}件)</span>
           </>
         ) : (
           <>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
-            <span>CSVで一括選択</span>
+            <span>CSV一括選択</span>
           </>
         )}
       </button>
 
       {/* 成功メッセージ */}
       {result && (
-        <div className="text-sm">
+        <div className="text-sm mt-2">
           <p className="text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded">
             {result.foundCount}件選択しました
             {result.notFoundCodes.length > 0 && (
@@ -206,7 +220,6 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
               </span>
             )}
           </p>
-
           {result.notFoundCodes.length > 0 && (
             <div className="mt-1">
               <button
@@ -235,7 +248,7 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
 
       {/* エラーメッセージ */}
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded">
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded mt-2">
           {error}
         </p>
       )}
