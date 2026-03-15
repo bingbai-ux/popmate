@@ -1,17 +1,22 @@
 'use client';
 
 import { Product } from '@/types/product';
+import { FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
 
 interface SelectedProductsSidebarProps {
   products: Product[];
   onRemove: (productId: string) => void;
   onClearAll: () => void;
+  fieldToggleState?: FieldToggleState;
+  csvFieldMap?: CsvFieldMap;
 }
 
 export default function SelectedProductsSidebar({
   products,
   onRemove,
   onClearAll,
+  fieldToggleState,
+  csvFieldMap,
 }: SelectedProductsSidebarProps) {
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(price);
@@ -44,7 +49,13 @@ export default function SelectedProductsSidebar({
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-text-dark truncate">{product.productName}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{product.productCode}</p>
-                    <p className="text-sm text-primary font-medium mt-1">{formatPrice(product.price)}</p>
+                    <p className="text-sm text-primary font-medium mt-1">
+                      {formatPrice(
+                        fieldToggleState?.price && csvFieldMap?.[product.productCode]?.price
+                          ? Number(csvFieldMap[product.productCode].price)
+                          : product.price
+                      )}
+                    </p>
                   </div>
                   <button onClick={() => onRemove(product.productId)} className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

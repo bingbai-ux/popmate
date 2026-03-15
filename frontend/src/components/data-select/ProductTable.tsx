@@ -1,6 +1,7 @@
 'use client';
 
 import { Product } from '@/types/product';
+import { FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
 
 interface ProductTableProps {
   products: Product[];
@@ -8,6 +9,26 @@ interface ProductTableProps {
   onToggleSelect: (productId: string) => void;
   onSelectAll: () => void;
   isLoading: boolean;
+  fieldToggleState?: FieldToggleState;
+  csvFieldMap?: CsvFieldMap;
+}
+
+/** CSV/Smaregi値を切り替えて表示値を決定 */
+function resolveDisplayValue(
+  productCode: string,
+  smaregiValue: string | number | null,
+  fieldName: string,
+  csvFieldMap?: CsvFieldMap,
+  fieldToggleState?: FieldToggleState
+): string | null {
+  if (!csvFieldMap || !fieldToggleState || !fieldToggleState[fieldName]) {
+    return null; // Smaregi値をそのまま使う
+  }
+  const csvFields = csvFieldMap[productCode];
+  if (!csvFields || !csvFields[fieldName]) {
+    return null; // CSV値なし → Smaregi値
+  }
+  return csvFields[fieldName];
 }
 
 export default function ProductTable({
@@ -16,10 +37,11 @@ export default function ProductTable({
   onToggleSelect,
   onSelectAll,
   isLoading,
+  fieldToggleState,
+  csvFieldMap,
 }: ProductTableProps) {
   const allSelected = products.length > 0 && products.every(p => selectedIds.includes(p.productId));
 
-  // 価格フォーマット
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('ja-JP', {
       style: 'currency',
@@ -75,7 +97,20 @@ export default function ProductTable({
           {products.map((product, index) => {
             const isSelected = selectedIds.includes(product.productId);
             const rowClass = index % 2 === 0 ? 'bg-white' : 'bg-background-muted';
-            
+
+            // CSV値でオーバーライドされた価格
+            const csvPrice = resolveDisplayValue(
+              product.productCode, product.price, 'price', csvFieldMap, fieldToggleState
+            );
+            const displayPrice = csvPrice != null ? Number(csvPrice) : product.price;
+            const priceOverridden = csvPrice != null;
+
+            // CSV値でオーバーライドされた説明文
+            const csvDescription = resolveDisplayValue(
+              product.productCode, product.description, 'description', csvFieldMap, fieldToggleState
+            );
+            const displayDescription = csvDescription ?? product.description;
+
             return (
               <tr
                 key={product.productId}
@@ -97,8 +132,8 @@ export default function ProductTable({
                 <td className="px-4 py-3">
                   <div>
                     <p className="text-sm font-medium text-text-dark">{product.productName}</p>
-                    {product.description && (
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{product.description}</p>
+                    {displayDescription && (
+                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{displayDescription}</p>
                     )}
                   </div>
                 </td>
@@ -112,7 +147,14 @@ export default function ProductTable({
                   {product.groupCode || '-'}
                 </td>
                 <td className="px-4 py-3 text-sm font-medium text-right text-text-dark">
-                  {formatPrice(product.price)}
+                  <span className={priceOverridden ? 'text-blue-600' : ''}>
+                    {formatPrice(displayPrice)}
+                  </span>
+                  {priceOverridden && (
+                    <span className="block text-xs text-gray-400">
+                      (Smaregi: {formatPrice(product.price)})
+                    </span>
+                  )}
                 </td>
               </tr>
             );

@@ -2,13 +2,22 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { Product } from '@/types/product';
+import {
+  ParsedCsvRow,
+  CsvFieldMap,
+  MergedProduct,
+  FieldToggleState,
+  JANCODE_COLUMN_ALIASES,
+  normalizeFieldName,
+} from '@/types/csvFieldToggle';
+import CsvPreviewModal from './CsvPreviewModal';
 
 interface CsvJancodeImportProps {
-  onImportComplete: (products: Product[]) => void;
+  onImportComplete: (products: Product[], toggleState: FieldToggleState, csvFieldMap: CsvFieldMap) => void;
   disabled?: boolean;
 }
 
-/** スマレジAPIレスポンスをProduct型に変換（api.tsと同じ税率ロジック） */
+/** スマレジAPIレスポンスをProduct型に変換 */
 function transformBulkProduct(p: any): Product {
   const taxRate = p.reduceTaxId ? 8 : 10;
   return {
@@ -32,9 +41,6 @@ interface ImportResult {
   notFoundCodes: string[];
 }
 
-/**
- * CSV取込によるJANCODE一括選択コンポーネント
- */
 export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJancodeImportProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
@@ -42,6 +48,13 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
   const [error, setError] = useState<string | null>(null);
   const [showNotFound, setShowNotFound] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // プレビューモーダル用state
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewData, setPreviewData] = useState<MergedProduct[]>([]);
+  const [previewNotFound, setPreviewNotFound] = useState<string[]>([]);
+  const [previewProducts, setPreviewProducts] = useState<Product[]>([]);
+  const [previewCsvFieldMap, setPreviewCsvFieldMap] = useState<CsvFieldMap>({});
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://popmate-production.up.railway.app';
 
@@ -53,75 +66,104 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
 
   const detectAndDecodeText = useCallback((buffer: ArrayBuffer): string => {
     const bytes = new Uint8Array(buffer);
-    // Shift-JIS判定: 0x80以上のバイトがあり、UTF-8として不正な場合
     let isUtf8 = true;
     for (let i = 0; i < bytes.length; i++) {
       if (bytes[i] >= 0x80) {
-        // UTF-8マルチバイトシーケンスの検証
         if (bytes[i] >= 0xC0 && bytes[i] < 0xE0) {
-          if (i + 1 >= bytes.length || (bytes[i + 1] & 0xC0) !== 0x80) {
-            isUtf8 = false; break;
-          }
+          if (i + 1 >= bytes.length || (bytes[i + 1] & 0xC0) !== 0x80) { isUtf8 = false; break; }
           i += 1;
         } else if (bytes[i] >= 0xE0 && bytes[i] < 0xF0) {
-          if (i + 2 >= bytes.length || (bytes[i + 1] & 0xC0) !== 0x80 || (bytes[i + 2] & 0xC0) !== 0x80) {
-            isUtf8 = false; break;
-          }
+          if (i + 2 >= bytes.length || (bytes[i + 1] & 0xC0) !== 0x80 || (bytes[i + 2] & 0xC0) !== 0x80) { isUtf8 = false; break; }
           i += 2;
         } else if (bytes[i] < 0xC0) {
           isUtf8 = false; break;
         }
       }
     }
-
-    if (isUtf8) {
-      return new TextDecoder('utf-8').decode(buffer);
-    }
-    return new TextDecoder('shift-jis').decode(buffer);
+    return isUtf8
+      ? new TextDecoder('utf-8').decode(buffer)
+      : new TextDecoder('shift-jis').decode(buffer);
   }, []);
 
-  const parseJancodesFromCsv = useCallback((text: string): string[] => {
+  /** CSV拡張パーサー: JANCODEと追加フィールドを返す */
+  const parseCsvRows = useCallback((text: string): ParsedCsvRow[] => {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (lines.length === 0) return [];
 
-    // ヘッダ判定: 1行目に "jancode" or "商品コード" があるか
-    const firstLine = lines[0].toLowerCase();
-    const columns = lines[0].split(',').map(c => c.trim().toLowerCase());
+    const rawColumns = lines[0].split(',').map(c => c.trim());
+    const lowerColumns = rawColumns.map(c => c.toLowerCase());
     let jancodeColIndex = 0;
     let startRow = 0;
+    let headerNames: string[] = [];
 
-    const headerKeywords = ['jancode', '商品コード', 'productcode', 'jan'];
-    const hasHeader = columns.some(col =>
-      headerKeywords.some(kw => col.includes(kw))
+    const hasHeader = lowerColumns.some(col =>
+      JANCODE_COLUMN_ALIASES.some(kw => col.includes(kw))
     );
 
     if (hasHeader) {
-      jancodeColIndex = columns.findIndex(col =>
-        headerKeywords.some(kw => col.includes(kw))
+      jancodeColIndex = lowerColumns.findIndex(col =>
+        JANCODE_COLUMN_ALIASES.some(kw => col.includes(kw))
       );
       startRow = 1;
-    } else if (firstLine.includes(',') && !/^\d+$/.test(columns[0])) {
-      // ヘッダっぽいが認識できない場合、1列目を使う
+      // JANCODE列以外をadditionalFieldsのヘッダとして保持
+      headerNames = rawColumns.map((name, i) =>
+        i === jancodeColIndex ? '' : normalizeFieldName(name)
+      );
+    } else if (lines[0].includes(',') && !/^\d+$/.test(lowerColumns[0])) {
       startRow = 1;
     }
 
-    const jancodes: string[] = [];
+    const rows: ParsedCsvRow[] = [];
     for (let i = startRow; i < lines.length; i++) {
-      const cols = lines[i].split(',');
-      const value = (cols[jancodeColIndex] || '').trim()
-        .replace(/^["']|["']$/g, ''); // クォート除去
-      if (value && /^\d+$/.test(value)) {
-        jancodes.push(value);
+      const cols = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+      const jancode = (cols[jancodeColIndex] || '').trim();
+      if (!jancode || !/^\d+$/.test(jancode)) continue;
+
+      const additionalFields: { [key: string]: string } = {};
+      if (headerNames.length > 0) {
+        headerNames.forEach((name, idx) => {
+          if (name && idx !== jancodeColIndex && cols[idx]) {
+            additionalFields[name] = cols[idx];
+          }
+        });
       }
+
+      rows.push({ jancode, additionalFields });
     }
-    return jancodes;
+    return rows;
   }, []);
+
+  /** CSVフィールドマップを構築 */
+  const buildCsvFieldMap = (rows: ParsedCsvRow[]): CsvFieldMap => {
+    return Object.fromEntries(rows.map(row => [row.jancode, row.additionalFields]));
+  };
+
+  /** マージデータ構築 */
+  const buildMergedProducts = (
+    foundProducts: any[],
+    csvFieldMap: CsvFieldMap
+  ): MergedProduct[] => {
+    return foundProducts.map(p => ({
+      productId: String(p.productId),
+      productCode: String(p.productCode),
+      productName: String(p.productName),
+      smaregiFields: {
+        price: p.price != null ? String(p.price) : null,
+        description: p.description || null,
+      },
+      csvFields: csvFieldMap[String(p.productCode)] ?? {},
+    }));
+  };
+
+  /** 初期トグル状態: CSVに値がある列はデフォルトON */
+  const buildInitialToggleState = (products: MergedProduct[]): FieldToggleState => {
+    const allCsvFields = products.flatMap(p => Object.keys(p.csvFields));
+    return Object.fromEntries([...new Set(allCsvFields)].map(f => [f, true]));
+  };
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // inputリセット（同じファイルを再選択可能にする）
     e.target.value = '';
 
     setIsLoading(true);
@@ -129,29 +171,27 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
     setError(null);
 
     try {
-      // ファイル読み込み
       const buffer = await file.arrayBuffer();
       const text = detectAndDecodeText(buffer);
-      const jancodes = parseJancodesFromCsv(text);
+      const csvRows = parseCsvRows(text);
 
-      if (jancodes.length === 0) {
+      if (csvRows.length === 0) {
         setError('CSVにJANCODEが含まれていません');
         setIsLoading(false);
         return;
       }
 
+      const jancodes = csvRows.map(r => r.jancode);
+      const csvFieldMap = buildCsvFieldMap(csvRows);
       setTotalCount(jancodes.length);
 
-      // API呼び出し
       const res = await fetch(`${API_BASE}/api/smaregi/products/bulk-search-by-jancode`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jancodes }),
       });
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const json = await res.json();
       const data = json.data || json;
@@ -163,19 +203,48 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
       }
 
       const products = (data.found as any[]).map(transformBulkProduct);
-      onImportComplete(products);
+      const notFoundCodes: string[] = data.notFound || [];
 
-      setResult({
-        foundCount: data.found.length,
-        notFoundCodes: data.notFound || [],
-      });
+      // 追加列があるかチェック
+      const hasAdditionalFields = Object.values(csvFieldMap).some(
+        fields => Object.keys(fields).length > 0
+      );
+
+      if (hasAdditionalFields) {
+        // 追加列あり → プレビューモーダルを開く
+        const merged = buildMergedProducts(data.found, csvFieldMap);
+        setPreviewData(merged);
+        setPreviewNotFound(notFoundCodes);
+        setPreviewProducts(products);
+        setPreviewCsvFieldMap(csvFieldMap);
+        setIsPreviewOpen(true);
+      } else {
+        // 追加列なし → 従来通り即時選択（v2互換）
+        onImportComplete(products, {}, {});
+        setResult({ foundCount: data.found.length, notFoundCodes });
+      }
     } catch (err: any) {
       console.log('=== CsvJancodeImport error ===', { err });
       setError('商品の検索に失敗しました。もう一度お試しください。');
     } finally {
       setIsLoading(false);
     }
-  }, [API_BASE, detectAndDecodeText, parseJancodesFromCsv, onImportComplete]);
+  }, [API_BASE, detectAndDecodeText, parseCsvRows, onImportComplete]);
+
+  const handlePreviewConfirm = useCallback((
+    productIds: string[],
+    toggleState: FieldToggleState
+  ) => {
+    setIsPreviewOpen(false);
+    // productIdsに対応するProduct[]をフィルタ
+    const idSet = new Set(productIds);
+    const selectedProducts = previewProducts.filter(p => idSet.has(p.productId));
+    onImportComplete(selectedProducts, toggleState, previewCsvFieldMap);
+    setResult({
+      foundCount: selectedProducts.length,
+      notFoundCodes: previewNotFound,
+    });
+  }, [previewProducts, previewCsvFieldMap, previewNotFound, onImportComplete]);
 
   return (
     <div className="inline-flex flex-col items-start gap-1">
@@ -187,7 +256,12 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
         className="hidden"
       />
 
-      {/* ボタン行: ボタン + 結果メッセージを横並び */}
+      {/* 注意書き */}
+      <p className="text-xs text-gray-400">
+        ※ CSVには商品コード（JANCODE）を記載してください
+      </p>
+
+      {/* ボタン行 */}
       <div className="flex items-center gap-2">
         <button
           onClick={handleButtonClick}
@@ -212,19 +286,15 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
           )}
         </button>
 
-        {/* 成功メッセージ（ボタンの右横） */}
         {result && (
           <span className="text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded whitespace-nowrap">
             {result.foundCount}件選択しました
             {result.notFoundCodes.length > 0 && (
-              <span className="text-orange-600">
-                （{result.notFoundCodes.length}件未検出）
-              </span>
+              <span className="text-orange-600">（{result.notFoundCodes.length}件未検出）</span>
             )}
           </span>
         )}
 
-        {/* エラーメッセージ（ボタンの右横） */}
         {error && (
           <span className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded whitespace-nowrap">
             {error}
@@ -232,35 +302,35 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
         )}
       </div>
 
-      {/* 注意書き */}
-      <p className="text-xs text-gray-400">
-        ※ CSVには商品コード（JANCODE）を記載してください
-      </p>
-
-      {/* 見つからなかったJANCODE一覧（折りたたみ） */}
+      {/* 見つからなかったJANCODE一覧 */}
       {result && result.notFoundCodes.length > 0 && (
         <div>
           <button
             onClick={() => setShowNotFound(!showNotFound)}
             className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
           >
-            <svg
-              className={`w-3 h-3 transition-transform ${showNotFound ? 'rotate-90' : ''}`}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
-            >
+            <svg className={`w-3 h-3 transition-transform ${showNotFound ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
             見つからなかったJANCODE一覧
           </button>
           {showNotFound && (
             <div className="mt-1 p-2 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 max-h-32 overflow-y-auto">
-              {result.notFoundCodes.map((code, i) => (
-                <div key={i}>{code}</div>
-              ))}
+              {result.notFoundCodes.map((code, i) => <div key={i}>{code}</div>)}
             </div>
           )}
         </div>
       )}
+
+      {/* プレビューモーダル */}
+      <CsvPreviewModal
+        isOpen={isPreviewOpen}
+        mergedProducts={previewData}
+        notFoundJancodes={previewNotFound}
+        initialToggleState={buildInitialToggleState(previewData)}
+        onConfirm={handlePreviewConfirm}
+        onClose={() => setIsPreviewOpen(false)}
+      />
     </div>
   );
 }
