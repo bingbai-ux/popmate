@@ -16,7 +16,7 @@ import {
   DEFAULT_TAX_SETTINGS,
 } from '@/types/editor';
 import { getTemplateById } from '@/types/template';
-import { loadSelectedProducts } from '@/lib/selectedProductsStorage';
+import { loadSelectedProducts, loadCsvFieldData } from '@/lib/selectedProductsStorage';
 import { loadEditorState } from '@/lib/editorStorage';
 import {
   calculateLayout,
@@ -26,6 +26,7 @@ import {
   type PaperSize,
 } from '@/lib/printLayout';
 import { replaceElementPlaceholders, replaceAllElementsWithSummarize } from '@/lib/placeholderUtils';
+import { applyCsvOverrides, FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
 import { applyKinsoku } from '@/lib/textUtils';
 
 function PrintContent() {
@@ -68,6 +69,10 @@ function PrintContent() {
 
   // AI要約フラグ（商品インデックスごと）
   const [summarizeFlags, setSummarizeFlags] = useState<boolean[]>([]);
+
+  // CSVフィールド切り替え
+  const [fieldToggleState, setFieldToggleState] = useState<FieldToggleState>({});
+  const [csvFieldMap, setCsvFieldMap] = useState<CsvFieldMap>({});
 
   // プレビュースケール
   const [previewScale, setPreviewScale] = useState(0.55);
@@ -116,6 +121,14 @@ function PrintContent() {
       console.error('[print] AI要約フラグの復元に失敗:', e);
     }
 
+    // CSVフィールドデータを復元
+    const savedCsvData = loadCsvFieldData(templateId);
+    if (savedCsvData) {
+      setCsvFieldMap(savedCsvData.csvFieldMap);
+      setFieldToggleState(savedCsvData.fieldToggleState);
+      console.log('[print] CSVフィールドデータを復元しました');
+    }
+
     // URLパラメータからプロジェクト情報を復元（保存データ再編集時）
     const pid = searchParams.get('projectId');
     const pname = searchParams.get('projectName');
@@ -125,18 +138,24 @@ function PrintContent() {
     setIsLoaded(true);
   }, [templateId, searchParams]);
 
+  // CSVオーバーライド適用済み商品リスト
+  const displayProducts = useMemo(() => {
+    if (Object.keys(csvFieldMap).length === 0) return products;
+    return products.map(p => applyCsvOverrides(p, csvFieldMap, fieldToggleState));
+  }, [products, csvFieldMap, fieldToggleState]);
+
   // --- AI要約付きプレースホルダー置換 ---
   useEffect(() => {
-    if (!isLoaded || products.length === 0 || elements.length === 0) return;
+    if (!isLoaded || displayProducts.length === 0 || elements.length === 0) return;
 
     let isCancelled = false;
     setIsProcessingElements(true);
 
     const processAll = async () => {
       const newMap = new Map<string, EditorElement[]>();
-      for (let i = 0; i < products.length; i++) {
+      for (let i = 0; i < displayProducts.length; i++) {
         if (isCancelled) return;
-        const product = products[i];
+        const product = displayProducts[i];
         const key = product.productId || product.productCode || product.productName;
         const shouldSummarize = summarizeFlags[i] ?? true;
 
@@ -163,7 +182,7 @@ function PrintContent() {
 
     processAll();
     return () => { isCancelled = true; };
-  }, [isLoaded, products, elements, taxSettings, summarizeFlags]);
+  }, [isLoaded, displayProducts, elements, taxSettings, summarizeFlags]);
 
   // --- プレビュースケールの動的計算 ---
   useEffect(() => {
@@ -501,7 +520,7 @@ function PrintContent() {
               {/* ★ 全ページをレンダリング（現在ページ以外は visibility: hidden） */}
               {Array.from({ length: layout.totalPages }, (_, pageIndex) => {
                 const startIdx = pageIndex * layout.itemsPerPage;
-                const pageProducts = products.slice(
+                const pageProducts = displayProducts.slice(
                   startIdx,
                   Math.min(startIdx + layout.itemsPerPage, products.length)
                 );
