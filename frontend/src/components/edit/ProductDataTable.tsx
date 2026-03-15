@@ -1,10 +1,17 @@
 'use client';
 
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect, Dispatch, SetStateAction } from 'react';
 import { Product } from '@/types/product';
 import { EditorElement, ImageElement } from '@/types/editor';
 import { getUsedColumns, calculateTaxIncludedPrice, formatPriceNumber } from '@/lib/placeholderUtils';
 import { setProductImage, getProductImage, getProductKey, compressImage } from '@/lib/productImageStore';
+import {
+  FieldToggleState,
+  CsvFieldMap,
+  resolveDisplayValue,
+  hasCsvField,
+  calcTaxIncludedPrice,
+} from '@/types/csvFieldToggle';
 
 interface ProductDataTableProps {
   products: Product[];
@@ -16,10 +23,13 @@ interface ProductDataTableProps {
   summarizeFlags?: boolean[];
   onToggleSummarize?: (index: number) => void;
   onToggleAllSummarize?: (enabled: boolean) => void;
+  fieldToggleState?: FieldToggleState;
+  onFieldToggleChange?: Dispatch<SetStateAction<FieldToggleState>>;
+  csvFieldMap?: CsvFieldMap;
 }
 
 /**
- * 商品データテーブル（列リサイズ・行展開対応）
+ * 商品データテーブル（列リサイズ・行展開対応・CSVフィールド切り替え対応）
  */
 export function ProductDataTable({
   products,
@@ -31,6 +41,9 @@ export function ProductDataTable({
   summarizeFlags,
   onToggleSummarize,
   onToggleAllSummarize,
+  fieldToggleState = {},
+  onFieldToggleChange,
+  csvFieldMap = {},
 }: ProductDataTableProps) {
   const usedColumns = useMemo(() => getUsedColumns(elements), [elements]);
 
@@ -46,6 +59,10 @@ export function ProductDataTable({
     elements.some(el => el.type === 'image' && (el as ImageElement).isDynamic),
     [elements]
   );
+
+  // CSVフィールドが存在するかチェック（ヘッダーチェックボックス表示判定）
+  const hasCsvPrice = hasCsvField('price', csvFieldMap);
+  const hasCsvDescription = hasCsvField('description', csvFieldMap);
 
   // 全選択チェックボックスの状態
   const allSummarizeEnabled = summarizeFlags?.every(Boolean) ?? true;
@@ -114,18 +131,53 @@ export function ProductDataTable({
     });
   }, []);
 
+  // CSVフィールドトグル切り替えハンドラ
+  const handleFieldToggle = useCallback((fieldName: string, checked: boolean) => {
+    if (onFieldToggleChange) {
+      onFieldToggleChange(prev => ({ ...prev, [fieldName]: checked }));
+    }
+  }, [onFieldToggleChange]);
+
   const getTaxIncludedPrice = useCallback((product: Product): number => {
     const taxDivision = product.taxDivision || '1';
     if (taxDivision === '0' || taxDivision === '2') return product.price;
     return calculateTaxIncludedPrice(product.price, product.taxRate || 10, roundingMethod);
   }, [roundingMethod]);
 
+  /** CSV値を考慮した税込価格計算 */
+  const getTaxIncludedPriceWithCsv = useCallback((product: Product): { price: number; isFromCsv: boolean } => {
+    const { value: priceStr, isFromCsv } = resolveDisplayValue(
+      product.productCode, product.price, 'price', csvFieldMap, fieldToggleState
+    );
+    if (isFromCsv) {
+      // CSV値 → 税抜前提で税込を再計算
+      const priceNum = Number(priceStr) || 0;
+      return { price: calcTaxIncludedPrice(priceNum, product.taxRate || 10), isFromCsv: true };
+    }
+    return { price: getTaxIncludedPrice(product), isFromCsv: false };
+  }, [csvFieldMap, fieldToggleState, getTaxIncludedPrice]);
+
   const getCellValue = useCallback((product: Product, key: string): string => {
+    // CSVオーバーライドが有効な列をチェック
+    if (key === 'price') {
+      const { value, isFromCsv } = resolveDisplayValue(
+        product.productCode, product.price, 'price', csvFieldMap, fieldToggleState
+      );
+      return isFromCsv ? value : `${product.price}`;
+    }
+    if (key === 'description') {
+      const { value } = resolveDisplayValue(
+        product.productCode, product.description, 'description', csvFieldMap, fieldToggleState
+      );
+      return value;
+    }
+    if (key === 'taxIncludedPrice') {
+      const { price } = getTaxIncludedPriceWithCsv(product);
+      return `¥${formatPriceNumber(price)}`;
+    }
+
     switch (key) {
       case 'productName': return product.productName || '';
-      case 'price': return `¥${formatPriceNumber(product.price)}`;
-      case 'taxIncludedPrice': return `¥${formatPriceNumber(getTaxIncludedPrice(product))}`;
-      case 'description': return product.description || '';
       case 'maker': return product.maker || product.tag || '';
       case 'taxRate': return `${product.taxRate || 10}%`;
       case 'category': return product.categoryName || '';
@@ -133,7 +185,21 @@ export function ProductDataTable({
       case 'productImage': return product.productImageUrl || '';
       default: return '';
     }
-  }, [getTaxIncludedPrice]);
+  }, [csvFieldMap, fieldToggleState, getTaxIncludedPriceWithCsv]);
+
+  /** セルがCSV値で表示されているか判定 */
+  const isCellFromCsv = useCallback((product: Product, key: string): boolean => {
+    if (key === 'price') {
+      return resolveDisplayValue(product.productCode, product.price, 'price', csvFieldMap, fieldToggleState).isFromCsv;
+    }
+    if (key === 'description') {
+      return resolveDisplayValue(product.productCode, product.description, 'description', csvFieldMap, fieldToggleState).isFromCsv;
+    }
+    if (key === 'taxIncludedPrice') {
+      return getTaxIncludedPriceWithCsv(product).isFromCsv;
+    }
+    return false;
+  }, [csvFieldMap, fieldToggleState, getTaxIncludedPriceWithCsv]);
 
   const isEditable = (key: string): boolean =>
     ['productName', 'price', 'description', 'maker'].includes(key);
@@ -158,12 +224,9 @@ export function ProductDataTable({
         const reader = new FileReader();
         reader.onload = async (event) => {
           const rawDataUrl = event.target?.result as string;
-          // 画像を圧縮（最大600px, JPEG 80%）
           const compressed = await compressImage(rawDataUrl);
           const key = getProductKey(product);
-          // メモリストアに保存
           setProductImage(key, compressed);
-          // Product の productImageUrl も更新（プレビューやプレースホルダー置換で使用）
           if (onEditProduct) {
             onEditProduct(index, 'productImageUrl', compressed);
           }
@@ -192,6 +255,20 @@ export function ProductDataTable({
   // テーブルの総幅を計算
   const summarizeColWidth = showSummarizeColumn ? 64 : 0;
   const totalWidth = 32 + 40 + summarizeColWidth + usedColumns.reduce((sum, col) => sum + (columnWidths[col.key] || 120), 0);
+
+  /** ヘッダーにCSVチェックボックスを表示するか */
+  const shouldShowCsvCheckbox = (colKey: string): boolean => {
+    if (colKey === 'price') return hasCsvPrice;
+    if (colKey === 'description') return hasCsvDescription;
+    return false;
+  };
+
+  /** CSVチェックボックスに対応するフィールド名を返す */
+  const getCsvFieldName = (colKey: string): string | null => {
+    if (colKey === 'price') return 'price';
+    if (colKey === 'description') return 'description';
+    return null;
+  };
 
   return (
     <div
@@ -229,19 +306,56 @@ export function ProductDataTable({
                 </div>
               </th>
             )}
-            {usedColumns.map((col) => (
-              <th
-                key={col.key}
-                className="relative px-3 py-2 text-left text-xs font-medium text-gray-600 border-b border-gray-200 select-none"
-              >
-                <span className="truncate block">{col.label}</span>
-                {/* リサイズハンドル */}
-                <div
-                  className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors z-20"
-                  onMouseDown={(e) => handleResizeStart(e, col.key)}
-                />
-              </th>
-            ))}
+            {usedColumns.map((col) => {
+              const csvFieldName = getCsvFieldName(col.key);
+              const showCsvCheckbox = shouldShowCsvCheckbox(col.key);
+              const isRightAligned = col.key === 'price' || col.key === 'taxIncludedPrice';
+              return (
+                <th
+                  key={col.key}
+                  className="relative px-3 py-2 text-left text-xs font-medium text-gray-600 border-b border-gray-200 select-none"
+                >
+                  <div className={`flex items-center gap-1.5 ${isRightAligned ? 'justify-end' : ''}`}>
+                    {/* 税抜価格: チェックボックスをラベルの左に */}
+                    {showCsvCheckbox && isRightAligned && csvFieldName && (
+                      <label
+                        className="flex items-center gap-1 cursor-pointer"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={fieldToggleState[csvFieldName] ?? false}
+                          onChange={e => handleFieldToggle(csvFieldName, e.target.checked)}
+                          className="w-3 h-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-[10px] text-blue-600 font-normal">CSV</span>
+                      </label>
+                    )}
+                    <span className="truncate">{col.label}</span>
+                    {/* 説明: チェックボックスをラベルの右に */}
+                    {showCsvCheckbox && !isRightAligned && csvFieldName && (
+                      <label
+                        className="flex items-center gap-1 cursor-pointer"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={fieldToggleState[csvFieldName] ?? false}
+                          onChange={e => handleFieldToggle(csvFieldName, e.target.checked)}
+                          className="w-3 h-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-[10px] text-blue-600 font-normal">CSV</span>
+                      </label>
+                    )}
+                  </div>
+                  {/* リサイズハンドル */}
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors z-20"
+                    onMouseDown={(e) => handleResizeStart(e, col.key)}
+                  />
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -289,73 +403,83 @@ export function ProductDataTable({
                   </td>
                 )}
                 {/* データセル */}
-                {usedColumns.map((col) => (
-                  <td
-                    key={col.key}
-                    className="px-3 py-2 text-sm text-left border-b border-gray-100 overflow-hidden"
-                  >
-                    {col.key === 'productImage' ? (
-                      // 商品画像セル
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        {product.productImageUrl ? (
-                          <div className="flex items-center gap-2">
-                            <img
-                              src={product.productImageUrl}
-                              alt="商品画像"
-                              className="w-8 h-8 object-contain rounded border border-gray-200"
-                            />
+                {usedColumns.map((col) => {
+                  const fromCsv = isCellFromCsv(product, col.key);
+                  return (
+                    <td
+                      key={col.key}
+                      className="px-3 py-2 text-sm text-left border-b border-gray-100 overflow-hidden"
+                    >
+                      {col.key === 'productImage' ? (
+                        // 商品画像セル
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          {product.productImageUrl ? (
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={product.productImageUrl}
+                                alt="商品画像"
+                                className="w-8 h-8 object-contain rounded border border-gray-200"
+                              />
+                              <button
+                                onClick={() => handleImageUpload(index)}
+                                className="text-xs text-blue-600 hover:text-blue-800"
+                                title="画像を変更"
+                              >
+                                変更
+                              </button>
+                              <button
+                                onClick={() => handleImageRemove(index)}
+                                className="text-xs text-red-500 hover:text-red-700"
+                                title="画像を削除"
+                              >
+                                削除
+                              </button>
+                            </div>
+                          ) : (
                             <button
                               onClick={() => handleImageUpload(index)}
-                              className="text-xs text-blue-600 hover:text-blue-800"
-                              title="画像を変更"
+                              className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-blue-600 border border-dashed border-gray-300 hover:border-blue-400 rounded transition-colors"
                             >
-                              変更
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                              画像を追加
                             </button>
-                            <button
-                              onClick={() => handleImageRemove(index)}
-                              className="text-xs text-red-500 hover:text-red-700"
-                              title="画像を削除"
-                            >
-                              削除
-                            </button>
-                          </div>
+                          )}
+                        </div>
+                      ) : isEditable(col.key) && onEditProduct && !fromCsv ? (
+                        isExpanded ? (
+                          <textarea
+                            value={col.key === 'price' ? String(product.price) : getCellValue(product, col.key)}
+                            onChange={(e) => handleCellEdit(index, col.key, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full px-1 py-0.5 border border-gray-300 focus:border-blue-400 focus:outline-none rounded text-sm bg-white resize-y min-h-[60px]"
+                            rows={3}
+                          />
                         ) : (
-                          <button
-                            onClick={() => handleImageUpload(index)}
-                            className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-blue-600 border border-dashed border-gray-300 hover:border-blue-400 rounded transition-colors"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            画像を追加
-                          </button>
-                        )}
-                      </div>
-                    ) : isEditable(col.key) && onEditProduct ? (
-                      isExpanded ? (
-                        <textarea
-                          value={col.key === 'price' ? String(product.price) : getCellValue(product, col.key)}
-                          onChange={(e) => handleCellEdit(index, col.key, e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-full px-1 py-0.5 border border-gray-300 focus:border-blue-400 focus:outline-none rounded text-sm bg-white resize-y min-h-[60px]"
-                          rows={3}
-                        />
+                          <input
+                            type={col.key === 'price' ? 'number' : 'text'}
+                            value={col.key === 'price' ? product.price : getCellValue(product, col.key)}
+                            onChange={(e) => handleCellEdit(index, col.key, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full px-1 py-0.5 border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none rounded text-sm bg-transparent truncate"
+                          />
+                        )
                       ) : (
-                        <input
-                          type={col.key === 'price' ? 'number' : 'text'}
-                          value={col.key === 'price' ? product.price : getCellValue(product, col.key)}
-                          onChange={(e) => handleCellEdit(index, col.key, e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-full px-1 py-0.5 border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none rounded text-sm bg-transparent truncate"
-                        />
-                      )
-                    ) : (
-                      <span className={`block text-gray-700 text-left ${isExpanded ? 'whitespace-pre-wrap' : 'truncate'}`}>
-                        {getCellValue(product, col.key)}
-                      </span>
-                    )}
-                  </td>
-                ))}
+                        <div className="flex items-center gap-1">
+                          <span className={`block text-gray-700 text-left ${isExpanded ? 'whitespace-pre-wrap' : 'truncate'}`}>
+                            {col.key === 'price' ? getCellValue(product, col.key) : getCellValue(product, col.key)}
+                          </span>
+                          {fromCsv && (
+                            <span className="inline-flex items-center text-[10px] px-1 py-0 rounded font-medium text-blue-700 bg-blue-50 whitespace-nowrap flex-shrink-0">
+                              CSV
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
             );
           })}

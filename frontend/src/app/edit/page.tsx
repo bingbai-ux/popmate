@@ -18,8 +18,9 @@ import {
   DEFAULT_TEXT_STYLE,
 } from '@/types/editor';
 import { getTemplateById } from '@/types/template';
-import { loadSelectedProducts, saveSelectedProducts } from '@/lib/selectedProductsStorage';
+import { loadSelectedProducts, saveSelectedProducts, loadCsvFieldData, saveCsvFieldData } from '@/lib/selectedProductsStorage';
 import { loadEditorState } from '@/lib/editorStorage';
+import { FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
 
 function EditContent() {
   const searchParams = useSearchParams();
@@ -41,6 +42,17 @@ function EditContent() {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [summarizeFlags, setSummarizeFlags] = useState<boolean[]>([]);
+
+  // ─── CSVフィールド切り替え ───
+  const [fieldToggleState, setFieldToggleState] = useState<FieldToggleState>({});
+  const [csvFieldMap, setCsvFieldMap] = useState<CsvFieldMap>({});
+
+  // CSVトグル変更時に自動保存
+  useEffect(() => {
+    if (Object.keys(csvFieldMap).length > 0) {
+      saveCsvFieldData(csvFieldMap, fieldToggleState, templateId);
+    }
+  }, [fieldToggleState, csvFieldMap, templateId]);
 
   const selectedProduct = products[currentProductIndex] || null;
   const selectedSummarizeEnabled = summarizeFlags[currentProductIndex] ?? true;
@@ -68,6 +80,14 @@ function EditContent() {
       console.log('[edit] 選択商品を読み込みました:', savedProducts.length, '件');
     } else {
       console.log('[edit] 選択商品が見つかりません');
+    }
+
+    // CSVフィールドデータを復元
+    const savedCsvData = loadCsvFieldData(templateId);
+    if (savedCsvData) {
+      setCsvFieldMap(savedCsvData.csvFieldMap);
+      setFieldToggleState(savedCsvData.fieldToggleState);
+      console.log('[edit] CSVフィールドデータを復元しました');
     }
 
     // editorStorageからテンプレート要素を取得
@@ -225,6 +245,7 @@ function EditContent() {
             onClick={() => {
               // 印刷前にデータを保存
               saveSelectedProducts(products, templateId);
+              saveCsvFieldData(csvFieldMap, fieldToggleState, templateId);
               sessionStorage.setItem('taxSettings', JSON.stringify(taxSettings));
               sessionStorage.setItem('summarizeFlags', JSON.stringify(summarizeFlags));
               router.push(`/print?template=${templateId}`);
@@ -294,6 +315,9 @@ function EditContent() {
                 summarizeFlags={summarizeFlags}
                 onToggleSummarize={handleToggleSummarize}
                 onToggleAllSummarize={handleToggleAllSummarize}
+                fieldToggleState={fieldToggleState}
+                onFieldToggleChange={setFieldToggleState}
+                csvFieldMap={csvFieldMap}
               />
             </div>
           }
