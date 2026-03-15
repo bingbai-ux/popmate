@@ -145,10 +145,9 @@ function DataSelectContent() {
     setSelectedProducts(new Map());
   }, []);
 
-  // CSV一括選択: 追加マージ（既存選択を上書きしない）+ フィールドトグル状態保持
+  // CSV一括選択: 追加マージ + CSVフィールドマップ保持 + 初期トグル設定
   const handleCsvImportComplete = useCallback((
     products: Product[],
-    toggleState: FieldToggleState,
     newCsvFieldMap: CsvFieldMap
   ) => {
     setSelectedProducts(prev => {
@@ -160,12 +159,21 @@ function DataSelectContent() {
       });
       return next;
     });
-    // フィールドトグル状態とCSVフィールドマップを保持
-    if (Object.keys(toggleState).length > 0) {
-      setFieldToggleState(toggleState);
-    }
+
+    // CSVフィールドマップをマージ
     if (Object.keys(newCsvFieldMap).length > 0) {
       setCsvFieldMap(prev => ({ ...prev, ...newCsvFieldMap }));
+
+      // CSVに値がある列をデフォルトONに設定
+      const allCsvFields = Object.values(newCsvFieldMap).flatMap(f => Object.keys(f));
+      const uniqueFields = [...new Set(allCsvFields)];
+      setFieldToggleState(prev => {
+        const next = { ...prev };
+        uniqueFields.forEach(f => {
+          if (!(f in next)) next[f] = true; // 新規フィールドのみデフォルトON
+        });
+        return next;
+      });
     }
   }, []);
 
@@ -262,6 +270,7 @@ function DataSelectContent() {
                 onSelectAll={handleSelectAll}
                 isLoading={isLoading}
                 fieldToggleState={fieldToggleState}
+                onFieldToggleChange={setFieldToggleState}
                 csvFieldMap={csvFieldMap}
               />
             )}

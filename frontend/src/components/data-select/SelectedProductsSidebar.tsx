@@ -1,7 +1,7 @@
 'use client';
 
 import { Product } from '@/types/product';
-import { FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
+import { FieldToggleState, CsvFieldMap, resolveDisplayValue, calcTaxIncludedPrice } from '@/types/csvFieldToggle';
 
 interface SelectedProductsSidebarProps {
   products: Product[];
@@ -43,19 +43,26 @@ export default function SelectedProductsSidebar({
           <div className="text-center py-8 text-gray-400 text-sm">商品を選択してください</div>
         ) : (
           <div className="space-y-2">
-            {products.map((product) => (
+            {products.map((product) => {
+              const { value: priceStr, isFromCsv } = resolveDisplayValue(
+                product.productCode, product.price, 'price',
+                csvFieldMap ?? {}, fieldToggleState ?? {}
+              );
+              const priceNum = Number(priceStr) || 0;
+              const taxIncluded = calcTaxIncludedPrice(priceNum, product.taxRate);
+              return (
               <div key={product.productId} className="bg-gray-50 rounded-lg p-3 group">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-text-dark truncate">{product.productName}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{product.productCode}</p>
                     <p className="text-sm text-primary font-medium mt-1">
-                      {formatPrice(
-                        fieldToggleState?.price && csvFieldMap?.[product.productCode]?.price
-                          ? Number(csvFieldMap[product.productCode].price)
-                          : product.price
+                      {formatPrice(priceNum)}
+                      {isFromCsv && (
+                        <span className="ml-1 text-[10px] px-1 py-0 rounded font-medium text-blue-700 bg-blue-50">CSV</span>
                       )}
                     </p>
+                    <p className="text-xs text-gray-400">税込 {formatPrice(taxIncluded)}</p>
                   </div>
                   <button onClick={() => onRemove(product.productId)} className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -64,7 +71,8 @@ export default function SelectedProductsSidebar({
                   </button>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>
