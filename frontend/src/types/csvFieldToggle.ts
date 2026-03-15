@@ -29,6 +29,7 @@ export function normalizeFieldName(header: string): string {
     'price', '価格', '税抜価格', '税込価格',
     '税抜き価格', '税込み価格', '売価', '単価', '定価',
     '税抜', '税込', '本体価格', '販売価格',
+    '商品単価', '商品価格', '上代',
   ];
   if (priceAliases.some(a => lower === a || lower.replace(/\s/g, '') === a)) return 'price';
   // 説明系

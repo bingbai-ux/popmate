@@ -80,12 +80,20 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
       : new TextDecoder('shift-jis').decode(buffer);
   }, []);
 
-  /** CSV拡張パーサー: JANCODEと追加フィールドを返す */
+  /** CSV拡張パーサー: JANCODEと追加フィールドを返す（CSV/TSV自動判定） */
   const parseCsvRows = useCallback((text: string): ParsedCsvRow[] => {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (lines.length === 0) return [];
 
-    const rawColumns = lines[0].split(',').map(c => c.trim());
+    // デリミタ自動検出: タブが含まれていればTSV、なければCSV
+    const firstLine = lines[0];
+    const delimiter = firstLine.includes('\t') ? '\t' : ',';
+    console.log('=== CSV Delimiter ===', delimiter === '\t' ? 'TAB (TSV)' : 'COMMA (CSV)');
+
+    const splitLine = (line: string) =>
+      line.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''));
+
+    const rawColumns = splitLine(firstLine);
     const lowerColumns = rawColumns.map(c => c.toLowerCase());
     let jancodeColIndex = 0;
     let startRow = 0;
@@ -107,14 +115,15 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
         rawColumns,
         normalizedHeaders: headerNames,
         jancodeColIndex,
+        delimiter: delimiter === '\t' ? 'TAB' : 'COMMA',
       });
-    } else if (lines[0].includes(',') && !/^\d+$/.test(lowerColumns[0])) {
+    } else if (firstLine.includes(delimiter) && !/^\d+$/.test(lowerColumns[0])) {
       startRow = 1;
     }
 
     const rows: ParsedCsvRow[] = [];
     for (let i = startRow; i < lines.length; i++) {
-      const cols = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+      const cols = splitLine(lines[i]);
       const jancode = (cols[jancodeColIndex] || '').trim();
       if (!jancode || !/^\d+$/.test(jancode)) continue;
 
