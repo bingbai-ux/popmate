@@ -12,20 +12,6 @@ export type CsvFieldMap = {
   };
 };
 
-/** マージ済み商品データ（メモリ上で保持） */
-export interface MergedProduct {
-  productId: string;
-  productCode: string;
-  productName: string;
-  smaregiFields: {
-    price: string | null;
-    description: string | null;
-  };
-  csvFields: {
-    [fieldName: string]: string;
-  };
-}
-
 /** CSVパース結果の1行 */
 export interface ParsedCsvRow {
   jancode: string;
@@ -35,17 +21,6 @@ export interface ParsedCsvRow {
 /** JANCODE列として認識する列名 */
 export const JANCODE_COLUMN_ALIASES = ['jancode', '商品コード', 'jan', 'ean', 'barcode', 'productcode'];
 
-/** CSVフィールド名の日本語表示マッピング */
-export const CSV_FIELD_LABELS: { [key: string]: string } = {
-  price: '価格',
-  description: '説明文',
-  '価格': '価格',
-  '説明文': '説明文',
-  '説明': '説明文',
-  '商品名': '商品名',
-  productname: '商品名',
-};
-
 /** CSVヘッダ名をフィールド名に正規化 */
 export function normalizeFieldName(header: string): string {
   const lower = header.toLowerCase().trim();
@@ -54,7 +29,49 @@ export function normalizeFieldName(header: string): string {
   return header.trim();
 }
 
-/** フィールド名の表示ラベルを取得 */
-export function getFieldLabel(fieldName: string): string {
-  return CSV_FIELD_LABELS[fieldName] || CSV_FIELD_LABELS[fieldName.toLowerCase()] || fieldName;
+// ─── 税込価格計算 ───
+
+/** reduceTaxId から税率（小数）を返す */
+export function getTaxRate(reduceTaxId: string | null | undefined): number {
+  if (reduceTaxId === '10000001') return 0.08; // 軽減税率 8%
+  // '10000002'~'10000004' は選択式 → 安全側で標準税率10%
+  if (['10000002', '10000003', '10000004'].includes(reduceTaxId ?? '')) {
+    console.log('=== 税率選択式商品 ===', { reduceTaxId, '適用税率': '10%（安全側）' });
+  }
+  return 0.10; // 標準税率 10%
+}
+
+/** 税抜価格 → 税込価格（四捨五入） */
+export function calcTaxIncludedPrice(
+  priceExcluded: number,
+  taxRate: number
+): number {
+  if (isNaN(priceExcluded)) return 0;
+  return Math.round(priceExcluded * (1 + taxRate / 100));
+}
+
+/** CSV/Smaregi値を切り替えて表示値を決定 */
+export function resolveDisplayValue(
+  productCode: string,
+  smaregiValue: string | number | null,
+  fieldName: string,
+  csvFieldMap: CsvFieldMap,
+  fieldToggleState: FieldToggleState
+): { value: string; isFromCsv: boolean } {
+  if (!fieldToggleState[fieldName]) {
+    return { value: smaregiValue != null ? String(smaregiValue) : '', isFromCsv: false };
+  }
+  const csvFields = csvFieldMap[productCode];
+  if (!csvFields || !csvFields[fieldName]) {
+    return { value: smaregiValue != null ? String(smaregiValue) : '', isFromCsv: false };
+  }
+  return { value: csvFields[fieldName], isFromCsv: true };
+}
+
+/** CsvFieldMapに特定フィールドのデータが1件以上あるか */
+export function hasCsvField(fieldName: string, csvFieldMap: CsvFieldMap): boolean {
+  for (const fields of Object.values(csvFieldMap)) {
+    if (fields[fieldName]) return true;
+  }
+  return false;
 }

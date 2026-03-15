@@ -1,7 +1,14 @@
 'use client';
 
+import { Dispatch, SetStateAction } from 'react';
 import { Product } from '@/types/product';
-import { FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
+import {
+  FieldToggleState,
+  CsvFieldMap,
+  calcTaxIncludedPrice,
+  resolveDisplayValue,
+  hasCsvField,
+} from '@/types/csvFieldToggle';
 
 interface ProductTableProps {
   products: Product[];
@@ -10,25 +17,8 @@ interface ProductTableProps {
   onSelectAll: () => void;
   isLoading: boolean;
   fieldToggleState?: FieldToggleState;
+  onFieldToggleChange?: Dispatch<SetStateAction<FieldToggleState>>;
   csvFieldMap?: CsvFieldMap;
-}
-
-/** CSV/Smaregi値を切り替えて表示値を決定 */
-function resolveDisplayValue(
-  productCode: string,
-  smaregiValue: string | number | null,
-  fieldName: string,
-  csvFieldMap?: CsvFieldMap,
-  fieldToggleState?: FieldToggleState
-): string | null {
-  if (!csvFieldMap || !fieldToggleState || !fieldToggleState[fieldName]) {
-    return null; // Smaregi値をそのまま使う
-  }
-  const csvFields = csvFieldMap[productCode];
-  if (!csvFields || !csvFields[fieldName]) {
-    return null; // CSV値なし → Smaregi値
-  }
-  return csvFields[fieldName];
 }
 
 export default function ProductTable({
@@ -37,8 +27,9 @@ export default function ProductTable({
   onToggleSelect,
   onSelectAll,
   isLoading,
-  fieldToggleState,
-  csvFieldMap,
+  fieldToggleState = {},
+  onFieldToggleChange,
+  csvFieldMap = {},
 }: ProductTableProps) {
   const allSelected = products.length > 0 && products.every(p => selectedIds.includes(p.productId));
 
@@ -47,6 +38,17 @@ export default function ProductTable({
       style: 'currency',
       currency: 'JPY',
     }).format(price);
+  };
+
+  // CSVフィールドが存在するかチェック（ヘッダーチェックボックス表示判定）
+  const hasCsvPrice = hasCsvField('price', csvFieldMap);
+  const hasCsvDescription = hasCsvField('description', csvFieldMap);
+
+  // チェックボックス切り替えハンドラ
+  const handleFieldToggle = (fieldName: string, checked: boolean) => {
+    if (onFieldToggleChange) {
+      onFieldToggleChange(prev => ({ ...prev, [fieldName]: checked }));
+    }
   };
 
   if (isLoading) {
@@ -89,8 +91,42 @@ export default function ProductTable({
             <th className="px-4 py-3 text-left text-sm font-bold">商品名</th>
             <th className="px-4 py-3 text-left text-sm font-bold">カテゴリ</th>
             <th className="px-4 py-3 text-left text-sm font-bold">メーカー</th>
-            <th className="px-4 py-3 text-left text-sm font-bold">仕入先</th>
-            <th className="px-4 py-3 text-right text-sm font-bold">価格</th>
+            {/* 説明列（CSVチェックボックス付き） */}
+            <th className="px-4 py-3 text-left text-sm font-bold">
+              <div className="flex items-center gap-1.5">
+                <span>説明</span>
+                {hasCsvDescription && (
+                  <label className="flex items-center gap-1 cursor-pointer" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={fieldToggleState['description'] ?? false}
+                      onChange={e => handleFieldToggle('description', e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-white/50 text-white focus:ring-white/50"
+                    />
+                    <span className="text-xs font-normal opacity-80">CSV</span>
+                  </label>
+                )}
+              </div>
+            </th>
+            {/* 税抜価格列（CSVチェックボックス付き） */}
+            <th className="px-4 py-3 text-right text-sm font-bold">
+              <div className="flex items-center justify-end gap-1.5">
+                {hasCsvPrice && (
+                  <label className="flex items-center gap-1 cursor-pointer" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={fieldToggleState['price'] ?? false}
+                      onChange={e => handleFieldToggle('price', e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-white/50 text-white focus:ring-white/50"
+                    />
+                    <span className="text-xs font-normal opacity-80">CSV</span>
+                  </label>
+                )}
+                <span>税抜価格</span>
+              </div>
+            </th>
+            {/* 税込価格列（チェックボックスなし・税抜に連動） */}
+            <th className="px-4 py-3 text-right text-sm font-bold">税込価格</th>
           </tr>
         </thead>
         <tbody>
@@ -98,18 +134,19 @@ export default function ProductTable({
             const isSelected = selectedIds.includes(product.productId);
             const rowClass = index % 2 === 0 ? 'bg-white' : 'bg-background-muted';
 
-            // CSV値でオーバーライドされた価格
-            const csvPrice = resolveDisplayValue(
+            // 税抜価格の解決
+            const { value: priceExStr, isFromCsv: priceIsFromCsv } = resolveDisplayValue(
               product.productCode, product.price, 'price', csvFieldMap, fieldToggleState
             );
-            const displayPrice = csvPrice != null ? Number(csvPrice) : product.price;
-            const priceOverridden = csvPrice != null;
+            const priceExNum = Number(priceExStr) || 0;
 
-            // CSV値でオーバーライドされた説明文
-            const csvDescription = resolveDisplayValue(
+            // 税込価格: CSV税抜が有効なら再計算、そうでなければSmaregi値から計算
+            const taxIncluded = calcTaxIncludedPrice(priceExNum, product.taxRate);
+
+            // 説明の解決
+            const { value: descValue, isFromCsv: descIsFromCsv } = resolveDisplayValue(
               product.productCode, product.description, 'description', csvFieldMap, fieldToggleState
             );
-            const displayDescription = csvDescription ?? product.description;
 
             return (
               <tr
@@ -130,12 +167,7 @@ export default function ProductTable({
                   {product.productCode}
                 </td>
                 <td className="px-4 py-3">
-                  <div>
-                    <p className="text-sm font-medium text-text-dark">{product.productName}</p>
-                    {displayDescription && (
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{displayDescription}</p>
-                    )}
-                  </div>
+                  <p className="text-sm font-medium text-text-dark">{product.productName}</p>
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">
                   {product.categoryName}
@@ -143,18 +175,31 @@ export default function ProductTable({
                 <td className="px-4 py-3 text-sm text-gray-600">
                   {product.maker || product.tag || '-'}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-600">
-                  {product.groupCode || '-'}
+                {/* 説明セル */}
+                <td className="px-4 py-3 text-sm text-gray-600 max-w-[200px]">
+                  <div className="flex items-center gap-1">
+                    <span className="line-clamp-1">{descValue || '-'}</span>
+                    {descIsFromCsv && (
+                      <span className="inline-flex items-center text-[10px] px-1.5 py-0 rounded font-medium text-blue-700 bg-blue-50 whitespace-nowrap flex-shrink-0">
+                        CSV
+                      </span>
+                    )}
+                  </div>
                 </td>
+                {/* 税抜価格セル */}
                 <td className="px-4 py-3 text-sm font-medium text-right text-text-dark">
-                  <span className={priceOverridden ? 'text-blue-600' : ''}>
-                    {formatPrice(displayPrice)}
-                  </span>
-                  {priceOverridden && (
-                    <span className="block text-xs text-gray-400">
-                      (Smaregi: {formatPrice(product.price)})
-                    </span>
-                  )}
+                  <div className="flex items-center justify-end gap-1">
+                    {priceIsFromCsv && (
+                      <span className="inline-flex items-center text-[10px] px-1.5 py-0 rounded font-medium text-blue-700 bg-blue-50 whitespace-nowrap flex-shrink-0">
+                        CSV
+                      </span>
+                    )}
+                    <span>{formatPrice(priceExNum)}</span>
+                  </div>
+                </td>
+                {/* 税込価格セル */}
+                <td className="px-4 py-3 text-sm font-medium text-right text-text-dark">
+                  {formatPrice(taxIncluded)}
                 </td>
               </tr>
             );

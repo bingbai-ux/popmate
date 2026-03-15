@@ -5,21 +5,23 @@ import { Product } from '@/types/product';
 import {
   ParsedCsvRow,
   CsvFieldMap,
-  MergedProduct,
-  FieldToggleState,
   JANCODE_COLUMN_ALIASES,
   normalizeFieldName,
 } from '@/types/csvFieldToggle';
-import CsvPreviewModal from './CsvPreviewModal';
 
 interface CsvJancodeImportProps {
-  onImportComplete: (products: Product[], toggleState: FieldToggleState, csvFieldMap: CsvFieldMap) => void;
+  onImportComplete: (products: Product[], csvFieldMap: CsvFieldMap) => void;
   disabled?: boolean;
 }
 
 /** スマレジAPIレスポンスをProduct型に変換 */
 function transformBulkProduct(p: any): Product {
-  const taxRate = p.reduceTaxId ? 8 : 10;
+  const reduceTaxId = p.reduceTaxId || null;
+  // 税率選択式の警告
+  if (['10000002', '10000003', '10000004'].includes(reduceTaxId ?? '')) {
+    console.log('=== 税率選択式商品 ===', { productId: p.productId, reduceTaxId, '適用税率': '10%（安全側）' });
+  }
+  const taxRate = reduceTaxId === '10000001' ? 8 : 10;
   return {
     productId: String(p.productId || ''),
     productCode: String(p.productCode || ''),
@@ -48,13 +50,6 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
   const [error, setError] = useState<string | null>(null);
   const [showNotFound, setShowNotFound] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // プレビューモーダル用state
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [previewData, setPreviewData] = useState<MergedProduct[]>([]);
-  const [previewNotFound, setPreviewNotFound] = useState<string[]>([]);
-  const [previewProducts, setPreviewProducts] = useState<Product[]>([]);
-  const [previewCsvFieldMap, setPreviewCsvFieldMap] = useState<CsvFieldMap>({});
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://popmate-production.up.railway.app';
 
@@ -105,7 +100,6 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
         JANCODE_COLUMN_ALIASES.some(kw => col.includes(kw))
       );
       startRow = 1;
-      // JANCODE列以外をadditionalFieldsのヘッダとして保持
       headerNames = rawColumns.map((name, i) =>
         i === jancodeColIndex ? '' : normalizeFieldName(name)
       );
@@ -133,34 +127,6 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
     return rows;
   }, []);
 
-  /** CSVフィールドマップを構築 */
-  const buildCsvFieldMap = (rows: ParsedCsvRow[]): CsvFieldMap => {
-    return Object.fromEntries(rows.map(row => [row.jancode, row.additionalFields]));
-  };
-
-  /** マージデータ構築 */
-  const buildMergedProducts = (
-    foundProducts: any[],
-    csvFieldMap: CsvFieldMap
-  ): MergedProduct[] => {
-    return foundProducts.map(p => ({
-      productId: String(p.productId),
-      productCode: String(p.productCode),
-      productName: String(p.productName),
-      smaregiFields: {
-        price: p.price != null ? String(p.price) : null,
-        description: p.description || null,
-      },
-      csvFields: csvFieldMap[String(p.productCode)] ?? {},
-    }));
-  };
-
-  /** 初期トグル状態: CSVに値がある列はデフォルトON */
-  const buildInitialToggleState = (products: MergedProduct[]): FieldToggleState => {
-    const allCsvFields = products.flatMap(p => Object.keys(p.csvFields));
-    return Object.fromEntries([...new Set(allCsvFields)].map(f => [f, true]));
-  };
-
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -182,7 +148,9 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
       }
 
       const jancodes = csvRows.map(r => r.jancode);
-      const csvFieldMap = buildCsvFieldMap(csvRows);
+      const csvFieldMap: CsvFieldMap = Object.fromEntries(
+        csvRows.map(row => [row.jancode, row.additionalFields])
+      );
       setTotalCount(jancodes.length);
 
       const res = await fetch(`${API_BASE}/api/smaregi/products/bulk-search-by-jancode`, {
@@ -205,24 +173,10 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
       const products = (data.found as any[]).map(transformBulkProduct);
       const notFoundCodes: string[] = data.notFound || [];
 
-      // 追加列があるかチェック
-      const hasAdditionalFields = Object.values(csvFieldMap).some(
-        fields => Object.keys(fields).length > 0
-      );
+      // 親に products と csvFieldMap を渡す（モーダルなし、即時選択）
+      onImportComplete(products, csvFieldMap);
 
-      if (hasAdditionalFields) {
-        // 追加列あり → プレビューモーダルを開く
-        const merged = buildMergedProducts(data.found, csvFieldMap);
-        setPreviewData(merged);
-        setPreviewNotFound(notFoundCodes);
-        setPreviewProducts(products);
-        setPreviewCsvFieldMap(csvFieldMap);
-        setIsPreviewOpen(true);
-      } else {
-        // 追加列なし → 従来通り即時選択（v2互換）
-        onImportComplete(products, {}, {});
-        setResult({ foundCount: data.found.length, notFoundCodes });
-      }
+      setResult({ foundCount: products.length, notFoundCodes });
     } catch (err: any) {
       console.log('=== CsvJancodeImport error ===', { err });
       setError('商品の検索に失敗しました。もう一度お試しください。');
@@ -230,21 +184,6 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
       setIsLoading(false);
     }
   }, [API_BASE, detectAndDecodeText, parseCsvRows, onImportComplete]);
-
-  const handlePreviewConfirm = useCallback((
-    productIds: string[],
-    toggleState: FieldToggleState
-  ) => {
-    setIsPreviewOpen(false);
-    // productIdsに対応するProduct[]をフィルタ
-    const idSet = new Set(productIds);
-    const selectedProducts = previewProducts.filter(p => idSet.has(p.productId));
-    onImportComplete(selectedProducts, toggleState, previewCsvFieldMap);
-    setResult({
-      foundCount: selectedProducts.length,
-      notFoundCodes: previewNotFound,
-    });
-  }, [previewProducts, previewCsvFieldMap, previewNotFound, onImportComplete]);
 
   return (
     <div className="inline-flex flex-col items-start gap-1">
@@ -256,12 +195,10 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
         className="hidden"
       />
 
-      {/* 注意書き */}
       <p className="text-xs text-gray-400">
         ※ CSVには商品コード（JANCODE）を記載してください
       </p>
 
-      {/* ボタン行 */}
       <div className="flex items-center gap-2">
         <button
           onClick={handleButtonClick}
@@ -302,7 +239,6 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
         )}
       </div>
 
-      {/* 見つからなかったJANCODE一覧 */}
       {result && result.notFoundCodes.length > 0 && (
         <div>
           <button
@@ -321,16 +257,6 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
           )}
         </div>
       )}
-
-      {/* プレビューモーダル */}
-      <CsvPreviewModal
-        isOpen={isPreviewOpen}
-        mergedProducts={previewData}
-        notFoundJancodes={previewNotFound}
-        initialToggleState={buildInitialToggleState(previewData)}
-        onConfirm={handlePreviewConfirm}
-        onClose={() => setIsPreviewOpen(false)}
-      />
     </div>
   );
 }
