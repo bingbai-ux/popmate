@@ -74,8 +74,10 @@ function PrintContent() {
   const [fieldToggleState, setFieldToggleState] = useState<FieldToggleState>({});
   const [csvFieldMap, setCsvFieldMap] = useState<CsvFieldMap>({});
 
-  // プレビュースケール
-  const [previewScale, setPreviewScale] = useState(0.55);
+  // プレビュースケール（autoScale: 自動計算, userZoom: ユーザー操作）
+  const [autoScale, setAutoScale] = useState(0.55);
+  const [userZoom, setUserZoom] = useState(1.0);
+  const previewScale = autoScale * userZoom;
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // --- 状態の復元 ---
@@ -177,7 +179,7 @@ function PrintContent() {
         // A4幅(210mm ≈ 793.7px @96dpi) に対するスケール
         const a4WidthPx = 210 * 3.7795; // ≈ 793.7px
         const scale = Math.min((containerWidth - 40) / a4WidthPx, 0.7);
-        setPreviewScale(Math.max(scale, 0.35));
+        setAutoScale(Math.max(scale, 0.35));
       }
     };
 
@@ -200,6 +202,11 @@ function PrintContent() {
   // --- ページナビゲーション ---
   const handlePrevPage = () => setDisplayPage(p => Math.max(0, p - 1));
   const handleNextPage = () => setDisplayPage(p => Math.min(layout.totalPages - 1, p + 1));
+
+  // --- ズーム操作 ---
+  const handleZoomIn = () => setUserZoom(z => Math.min(z + 0.25, 2.0));
+  const handleZoomOut = () => setUserZoom(z => Math.max(z - 0.25, 0.5));
+  const handleZoomReset = () => setUserZoom(1.0);
 
   // --- 印刷 ---
   const handlePrint = () => {
@@ -572,10 +579,10 @@ function PrintContent() {
               })}
             </div>
 
-            {/* ページナビゲーション */}
-            <div className="no-print">
+            {/* ページナビゲーション + ズームコントロール */}
+            <div className="no-print flex items-center justify-center gap-6 mt-4">
               {layout.totalPages > 1 && (
-                <div className="flex items-center justify-center gap-4 mt-4">
+                <div className="flex items-center gap-4">
                   <button
                     onClick={handlePrevPage}
                     disabled={displayPage <= 0}
@@ -599,6 +606,37 @@ function PrintContent() {
                   </button>
                 </div>
               )}
+
+              {/* ズームコントロール */}
+              <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1">
+                <button
+                  onClick={handleZoomOut}
+                  disabled={userZoom <= 0.5}
+                  className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="縮小"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                  </svg>
+                </button>
+                <button
+                  onClick={handleZoomReset}
+                  className="px-2 h-8 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded transition-colors min-w-[52px]"
+                  title="リセット"
+                >
+                  {Math.round(userZoom * 100)}%
+                </button>
+                <button
+                  onClick={handleZoomIn}
+                  disabled={userZoom >= 2.0}
+                  className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="拡大"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
 
