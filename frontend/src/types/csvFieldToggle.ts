@@ -80,6 +80,33 @@ export function resolveDisplayValue(
   return { value: csvFields[fieldName], isFromCsv: true };
 }
 
+/** Product オブジェクトに CSV オーバーライドを適用して新しい Product を返す */
+export function applyCsvOverrides(
+  product: import('@/types/product').Product,
+  csvFieldMap: CsvFieldMap,
+  fieldToggleState: FieldToggleState
+): import('@/types/product').Product {
+  const csvFields = csvFieldMap[product.productCode];
+  if (!csvFields) return product;
+
+  let overridden = { ...product };
+
+  // 税抜価格の上書き
+  if (fieldToggleState['price'] && csvFields['price']) {
+    const csvPrice = Number(csvFields['price']);
+    if (!isNaN(csvPrice)) {
+      overridden.price = csvPrice;
+    }
+  }
+
+  // 説明の上書き
+  if (fieldToggleState['description'] && csvFields['description']) {
+    overridden.description = csvFields['description'];
+  }
+
+  return overridden;
+}
+
 /** CsvFieldMapに特定フィールドのデータが1件以上あるか */
 export function hasCsvField(fieldName: string, csvFieldMap: CsvFieldMap): boolean {
   for (const fields of Object.values(csvFieldMap)) {

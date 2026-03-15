@@ -20,7 +20,7 @@ import {
 import { getTemplateById } from '@/types/template';
 import { loadSelectedProducts, saveSelectedProducts, loadCsvFieldData, saveCsvFieldData } from '@/lib/selectedProductsStorage';
 import { loadEditorState } from '@/lib/editorStorage';
-import { FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
+import { FieldToggleState, CsvFieldMap, applyCsvOverrides } from '@/types/csvFieldToggle';
 
 function EditContent() {
   const searchParams = useSearchParams();
@@ -54,7 +54,10 @@ function EditContent() {
     }
   }, [fieldToggleState, csvFieldMap, templateId]);
 
-  const selectedProduct = products[currentProductIndex] || null;
+  const rawSelectedProduct = products[currentProductIndex] || null;
+  const selectedProduct = rawSelectedProduct
+    ? applyCsvOverrides(rawSelectedProduct, csvFieldMap, fieldToggleState)
+    : null;
   const selectedSummarizeEnabled = summarizeFlags[currentProductIndex] ?? true;
 
   // 初期データ読み込み
