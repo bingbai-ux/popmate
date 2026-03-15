@@ -513,6 +513,90 @@ export async function searchProducts(params: {
 }
 
 /**
+ * JANCODEで1件検索（スマレジAPIを1回叩く）
+ */
+async function fetchOneByJancode(jancode: string): Promise<{
+  productId: string;
+  productCode: string;
+  productName: string;
+} | null> {
+  try {
+    const response = await smaregiRequest('/products/', {
+      product_code: jancode,
+      limit: '1',
+    });
+    const data = response.data;
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const p = data[0];
+    return {
+      productId: String(p.productId),
+      productCode: String(p.productCode),
+      productName: String(p.productName),
+    };
+  } catch (err) {
+    console.log('=== fetchOneByJancode error ===', { jancode, err });
+    return null;
+  }
+}
+
+/**
+ * チャンク並列処理
+ */
+async function chunkedParallel<T, R>(
+  items: T[],
+  chunkSize: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize);
+    const chunkResults = await Promise.all(chunk.map(fn));
+    results.push(...chunkResults);
+  }
+  return results;
+}
+
+/**
+ * JANCODE一括検索（並列API方式）
+ * 200件以下: 全並列、201件以上: 50件ずつチャンク並列
+ */
+const PARALLEL_LIMIT = 50;
+
+export async function bulkSearchByJancode(jancodes: string[]): Promise<{
+  found: Array<{ productId: string; productCode: string; productName: string }>;
+  notFound: string[];
+}> {
+  const uniqueCodes = [...new Set(jancodes)];
+
+  if (uniqueCodes.length === 0) {
+    return { found: [], notFound: [] };
+  }
+
+  console.log('=== bulkSearchByJancode ===', {
+    total: uniqueCodes.length,
+    mode: uniqueCodes.length <= 200 ? 'full-parallel' : 'chunked',
+  });
+
+  const results = uniqueCodes.length <= 200
+    ? await Promise.all(uniqueCodes.map(fetchOneByJancode))
+    : await chunkedParallel(uniqueCodes, PARALLEL_LIMIT, fetchOneByJancode);
+
+  const found = results.filter(
+    (r): r is { productId: string; productCode: string; productName: string } => r !== null
+  );
+  const foundCodes = new Set(found.map(r => r.productCode));
+  const notFound = uniqueCodes.filter(code => !foundCodes.has(code));
+
+  console.log('=== bulkSearchByJancode result ===', {
+    found: found.length,
+    notFound: notFound.length,
+  });
+
+  return { found, notFound };
+}
+
+/**
  * 商品詳細を取得
  */
 export async function getProductById(productId: string): Promise<SmaregiProduct | null> {

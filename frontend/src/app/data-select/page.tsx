@@ -8,6 +8,7 @@ import ProgressBar from '@/components/ProgressBar';
 import SearchFilters, { SearchFiltersType } from '@/components/data-select/SearchFilters';
 import ProductTable from '@/components/data-select/ProductTable';
 import SelectedProductsSidebar from '@/components/data-select/SelectedProductsSidebar';
+import CsvJancodeImport, { BulkSearchProduct } from '@/components/data-select/CsvJancodeImport';
 import { Product, Category } from '@/types/product';
 import { searchProducts, fetchCategoriesWithId, fetchProductFilters } from '@/lib/api';
 import { saveSelectedProducts, loadSelectedProducts } from '@/lib/selectedProductsStorage';
@@ -139,6 +140,31 @@ function DataSelectContent() {
     setSelectedProducts(new Map());
   }, []);
 
+  // CSV一括選択: 追加マージ（既存選択を上書きしない）
+  const handleCsvImportComplete = useCallback((products: BulkSearchProduct[]) => {
+    setSelectedProducts(prev => {
+      const next = new Map(prev);
+      products.forEach(p => {
+        if (!next.has(p.productId)) {
+          next.set(p.productId, {
+            productId: p.productId,
+            productCode: p.productCode,
+            productName: p.productName,
+            price: 0,
+            categoryId: '',
+            categoryName: '',
+            groupCode: '',
+            description: '',
+            maker: '',
+            taxDivision: '1',
+            taxRate: 10,
+          });
+        }
+      });
+      return next;
+    });
+  }, []);
+
   const handleNext = () => {
     if (selectedProducts.size === 0) {
       alert('商品を1つ以上選択してください');
@@ -182,15 +208,23 @@ function DataSelectContent() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* 検索フィルタ */}
           <div className="p-4">
-            <SearchFilters
-              categories={categories}
-              makers={makers}
-              suppliers={suppliers}
-              onSearch={handleSearch}
-              isLoading={isLoading}
-              isFiltersLoading={isFiltersLoading}
-              hasSearched={hasSearched}
-            />
+            <div className="flex items-start gap-4">
+              <div className="flex-1">
+                <SearchFilters
+                  categories={categories}
+                  makers={makers}
+                  suppliers={suppliers}
+                  onSearch={handleSearch}
+                  isLoading={isLoading}
+                  isFiltersLoading={isFiltersLoading}
+                  hasSearched={hasSearched}
+                />
+              </div>
+              <CsvJancodeImport
+                onImportComplete={handleCsvImportComplete}
+                disabled={isLoading}
+              />
+            </div>
           </div>
 
           {/* スマレジ未接続の警告 */}

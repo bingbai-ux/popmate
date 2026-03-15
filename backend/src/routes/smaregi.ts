@@ -1,7 +1,7 @@
 // backend/src/routes/smaregi.ts
 
 import { Router, Request, Response } from 'express';
-import { getProducts, getAllProducts, getProductById, getCategories, getSuppliers, searchProducts, getProductFilters } from '../services/smaregiService.js';
+import { getProducts, getAllProducts, getProductById, getCategories, getSuppliers, searchProducts, getProductFilters, bulkSearchByJancode } from '../services/smaregiService.js';
 
 const router = Router();
 
@@ -20,6 +20,40 @@ router.get('/products/filters', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Smaregi Filters Error]', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error: 'api_error',
+      message: error.response?.data?.message || error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/smaregi/products/bulk-search-by-jancode
+ * JANCODE一括検索（CSV取込用）
+ */
+router.post('/products/bulk-search-by-jancode', async (req: Request, res: Response) => {
+  try {
+    const { jancodes } = req.body;
+
+    if (!Array.isArray(jancodes)) {
+      return res.status(400).json({
+        success: false,
+        error: 'invalid_request',
+        message: 'jancodes must be an array of strings',
+      });
+    }
+
+    console.log('[Smaregi] JANCODE一括検索:', jancodes.length, '件');
+
+    const result = await bulkSearchByJancode(jancodes);
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    console.error('[Smaregi Bulk Search Error]', error.response?.data || error.message);
     res.status(error.response?.status || 500).json({
       success: false,
       error: 'api_error',
