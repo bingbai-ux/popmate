@@ -178,7 +178,7 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
   }, [API_BASE, detectAndDecodeText, parseJancodesFromCsv, onImportComplete]);
 
   return (
-    <div className="inline-flex flex-col items-start">
+    <div className="inline-flex flex-col items-start gap-1">
       <input
         ref={fileInputRef}
         type="file"
@@ -186,71 +186,80 @@ export default function CsvJancodeImport({ onImportComplete, disabled }: CsvJanc
         onChange={handleFileChange}
         className="hidden"
       />
-      <button
-        onClick={handleButtonClick}
-        disabled={disabled || isLoading}
-        className="flex items-center gap-2 px-4 py-2 text-sm border border-border text-gray-600 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-      >
-        {isLoading ? (
-          <>
-            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <span>CSV取込中... ({totalCount}件)</span>
-          </>
-        ) : (
-          <>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-            <span>CSV一括選択</span>
-          </>
-        )}
-      </button>
 
-      {/* 成功メッセージ */}
-      {result && (
-        <div className="text-sm mt-2">
-          <p className="text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded">
+      {/* ボタン行: ボタン + 結果メッセージを横並び */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleButtonClick}
+          disabled={disabled || isLoading}
+          className="flex items-center gap-2 px-4 py-2 text-sm border border-border text-gray-600 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+        >
+          {isLoading ? (
+            <>
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span>CSV取込中... ({totalCount}件)</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span>CSV一括選択</span>
+            </>
+          )}
+        </button>
+
+        {/* 成功メッセージ（ボタンの右横） */}
+        {result && (
+          <span className="text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded whitespace-nowrap">
             {result.foundCount}件選択しました
             {result.notFoundCodes.length > 0 && (
               <span className="text-orange-600">
-                （{result.notFoundCodes.length}件は見つかりませんでした）
+                （{result.notFoundCodes.length}件未検出）
               </span>
             )}
-          </p>
-          {result.notFoundCodes.length > 0 && (
-            <div className="mt-1">
-              <button
-                onClick={() => setShowNotFound(!showNotFound)}
-                className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
-              >
-                <svg
-                  className={`w-3 h-3 transition-transform ${showNotFound ? 'rotate-90' : ''}`}
-                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-                見つからなかったJANCODE一覧
-              </button>
-              {showNotFound && (
-                <div className="mt-1 p-2 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 max-h-32 overflow-y-auto">
-                  {result.notFoundCodes.map((code, i) => (
-                    <div key={i}>{code}</div>
-                  ))}
-                </div>
-              )}
+          </span>
+        )}
+
+        {/* エラーメッセージ（ボタンの右横） */}
+        {error && (
+          <span className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded whitespace-nowrap">
+            {error}
+          </span>
+        )}
+      </div>
+
+      {/* 注意書き */}
+      <p className="text-xs text-gray-400">
+        ※ CSVには商品コード（JANCODE）を記載してください
+      </p>
+
+      {/* 見つからなかったJANCODE一覧（折りたたみ） */}
+      {result && result.notFoundCodes.length > 0 && (
+        <div>
+          <button
+            onClick={() => setShowNotFound(!showNotFound)}
+            className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+          >
+            <svg
+              className={`w-3 h-3 transition-transform ${showNotFound ? 'rotate-90' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            見つからなかったJANCODE一覧
+          </button>
+          {showNotFound && (
+            <div className="mt-1 p-2 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 max-h-32 overflow-y-auto">
+              {result.notFoundCodes.map((code, i) => (
+                <div key={i}>{code}</div>
+              ))}
             </div>
           )}
         </div>
-      )}
-
-      {/* エラーメッセージ */}
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded mt-2">
-          {error}
-        </p>
       )}
     </div>
   );
