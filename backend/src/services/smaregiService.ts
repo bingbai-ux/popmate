@@ -514,12 +514,12 @@ export async function searchProducts(params: {
 
 /**
  * JANCODEで1件検索（スマレジAPIを1回叩く）
+ * カテゴリ名解決のためcategoryMapを受け取る
  */
-async function fetchOneByJancode(jancode: string): Promise<{
-  productId: string;
-  productCode: string;
-  productName: string;
-} | null> {
+async function fetchOneByJancode(
+  jancode: string,
+  categoryMap: Map<string, string>
+): Promise<SmaregiProduct | null> {
   try {
     const response = await smaregiRequest('/products/', {
       product_code: jancode,
@@ -531,8 +531,19 @@ async function fetchOneByJancode(jancode: string): Promise<{
     const p = data[0];
     return {
       productId: String(p.productId),
-      productCode: String(p.productCode),
-      productName: String(p.productName),
+      productCode: p.productCode || '',
+      productName: p.productName || '',
+      price: Number(p.price) || 0,
+      taxRate: p.taxRate ? Number(p.taxRate) : undefined,
+      categoryId: p.categoryId ? String(p.categoryId) : undefined,
+      categoryName: categoryMap.get(String(p.categoryId)) || p.categoryName || '',
+      groupCode: p.groupCode || undefined,
+      tag: p.tag || undefined,
+      supplierProductNo: p.supplierProductNo || undefined,
+      description: p.description || undefined,
+      taxDivision: p.taxDivision || '1',
+      reduceTaxId: p.reduceTaxId || null,
+      useCategoryReduceTax: p.useCategoryReduceTax || '0',
     };
   } catch (err) {
     console.log('=== fetchOneByJancode error ===', { jancode, err });
@@ -564,7 +575,7 @@ async function chunkedParallel<T, R>(
 const PARALLEL_LIMIT = 50;
 
 export async function bulkSearchByJancode(jancodes: string[]): Promise<{
-  found: Array<{ productId: string; productCode: string; productName: string }>;
+  found: SmaregiProduct[];
   notFound: string[];
 }> {
   const uniqueCodes = [...new Set(jancodes)];
@@ -578,12 +589,17 @@ export async function bulkSearchByJancode(jancodes: string[]): Promise<{
     mode: uniqueCodes.length <= 200 ? 'full-parallel' : 'chunked',
   });
 
+  // カテゴリ名解決用Mapを先に取得
+  const categoryMap = await getCategoryMap();
+
+  const searchOne = (code: string) => fetchOneByJancode(code, categoryMap);
+
   const results = uniqueCodes.length <= 200
-    ? await Promise.all(uniqueCodes.map(fetchOneByJancode))
-    : await chunkedParallel(uniqueCodes, PARALLEL_LIMIT, fetchOneByJancode);
+    ? await Promise.all(uniqueCodes.map(searchOne))
+    : await chunkedParallel(uniqueCodes, PARALLEL_LIMIT, searchOne);
 
   const found = results.filter(
-    (r): r is { productId: string; productCode: string; productName: string } => r !== null
+    (r): r is SmaregiProduct => r !== null
   );
   const foundCodes = new Set(found.map(r => r.productCode));
   const notFound = uniqueCodes.filter(code => !foundCodes.has(code));

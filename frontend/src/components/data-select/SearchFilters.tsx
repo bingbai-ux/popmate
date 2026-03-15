@@ -12,6 +12,7 @@ interface SearchFiltersProps {
   isLoading: boolean;
   isFiltersLoading: boolean;  // フィルタ一覧読み込み中
   hasSearched: boolean;
+  csvImportSlot?: React.ReactNode;  // CSV一括選択ボタン用スロット
 }
 
 export interface SearchFiltersType {
@@ -29,6 +30,7 @@ export default function SearchFilters({
   isLoading,
   isFiltersLoading,
   hasSearched,
+  csvImportSlot,
 }: SearchFiltersProps) {
   const [keyword, setKeyword] = useState('');
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
@@ -141,6 +143,7 @@ export default function SearchFilters({
           >
             クリア
           </button>
+          {csvImportSlot}
         </div>
       </div>
 
