@@ -152,7 +152,7 @@ export function ProductDataTable({
     if (isFromCsv) {
       // CSV値 → 税抜前提で税込を再計算
       const priceNum = Number(priceStr) || 0;
-      return { price: calcTaxIncludedPrice(priceNum, product.taxRate || 10), isFromCsv: true };
+      return { price: calcTaxIncludedPrice(priceNum, product.taxRate || 10, roundingMethod), isFromCsv: true };
     }
     return { price: getTaxIncludedPrice(product), isFromCsv: false };
   }, [csvFieldMap, fieldToggleState, getTaxIncludedPrice]);
