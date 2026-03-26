@@ -53,13 +53,17 @@ export function getTaxRate(reduceTaxId: string | null | undefined): number {
   return 0.10; // 標準税率 10%
 }
 
-/** 税抜価格 → 税込価格（四捨五入） */
+/** 税抜価格 → 税込価格（デフォルト切り捨て） */
 export function calcTaxIncludedPrice(
   priceExcluded: number,
-  taxRate: number
+  taxRate: number,
+  roundingMode: 'floor' | 'ceil' | 'round' = 'floor'
 ): number {
   if (isNaN(priceExcluded)) return 0;
-  return Math.round(priceExcluded * (1 + taxRate / 100));
+  const raw = priceExcluded * (1 + taxRate / 100);
+  if (roundingMode === 'ceil') return Math.ceil(raw);
+  if (roundingMode === 'round') return Math.round(raw);
+  return Math.floor(raw);
 }
 
 /** CSV/Smaregi値を切り替えて表示値を決定 */
