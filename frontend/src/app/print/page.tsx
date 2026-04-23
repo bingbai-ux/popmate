@@ -348,6 +348,7 @@ function PrintContent() {
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent,
+                  overflow: 'hidden',
                 }}
               >
                 <div
@@ -365,6 +366,7 @@ function PrintContent() {
                     writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
                     whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
                     ...(isDescription ? {} : { wordBreak: 'keep-all' as const, overflowWrap: 'break-word' as const }),
+                    overflow: 'hidden',
                     transform: processedElement.style.textWidth !== 100 ? `scaleX(${processedElement.style.textWidth / 100})` : undefined,
                     transformOrigin: 'left top',
                   }}
