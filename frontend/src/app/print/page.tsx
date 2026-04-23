@@ -25,7 +25,7 @@ import {
   type LayoutResult,
   type PaperSize,
 } from '@/lib/printLayout';
-import { replaceElementPlaceholders } from '@/lib/placeholderUtils';
+import { replaceElementPlaceholders, replaceAllElementsWithSummarize } from '@/lib/placeholderUtils';
 import { applyCsvOverrides, FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
 import { applyKinsoku } from '@/lib/textUtils';
 
@@ -150,26 +150,57 @@ function PrintContent() {
   useEffect(() => {
     if (!isLoaded || displayProducts.length === 0 || elements.length === 0) return;
 
-    // editページで事前処理済みのデータを復元
+    // editページで事前処理済みのキャッシュがあれば使う（高速パス）。
+    // 現在の商品リストを全カバーしているときのみ採用し、欠けているものは
+    // この画面でAI要約を追加計算する（リロード/直リンクや「印刷へ進む」を
+    // 経由しない経路でも要約が効くようにするため）。
     const cached = loadProcessedElements();
-    if (cached && cached.size > 0) {
+    const productKeys = displayProducts.map(
+      p => p.productId || p.productCode || p.productName
+    );
+    const missingKeys = cached
+      ? productKeys.filter(k => !cached.has(k))
+      : productKeys;
+
+    if (cached && missingKeys.length === 0) {
       setProcessedElementsMap(cached);
       setIsProcessingElements(false);
       console.log('[print] 事前処理済みデータを使用:', cached.size, '件');
       return;
     }
 
-    // フォールバック: キャッシュがない場合のみプレースホルダー置換（AI要約なし）
-    console.log('[print] キャッシュなし、通常置換で表示');
-    const newMap = new Map<string, EditorElement[]>();
-    for (const product of displayProducts) {
-      const key = product.productId || product.productCode || product.productName;
-      const replaced = elements.map(el => replaceElementPlaceholders(el, product, taxSettings));
-      newMap.set(key, replaced);
-    }
-    setProcessedElementsMap(newMap);
-    setIsProcessingElements(false);
-  }, [isLoaded, displayProducts, elements, taxSettings]);
+    let cancelled = false;
+    setIsProcessingElements(true);
+
+    (async () => {
+      const newMap = new Map<string, EditorElement[]>(cached ?? []);
+      for (let i = 0; i < displayProducts.length; i++) {
+        if (cancelled) return;
+        const product = displayProducts[i];
+        const key = product.productId || product.productCode || product.productName;
+        if (newMap.has(key)) continue; // 既にキャッシュ済み
+
+        const shouldSummarize = summarizeFlags[i] ?? true;
+        if (shouldSummarize) {
+          try {
+            const processed = await replaceAllElementsWithSummarize(elements, product, taxSettings);
+            newMap.set(key, processed);
+          } catch (err) {
+            console.error('[print] AI要約失敗、プレーン置換にフォールバック:', err);
+            newMap.set(key, elements.map(el => replaceElementPlaceholders(el, product, taxSettings)));
+          }
+        } else {
+          newMap.set(key, elements.map(el => replaceElementPlaceholders(el, product, taxSettings)));
+        }
+      }
+      if (cancelled) return;
+      console.log('[print] 要約処理完了:', newMap.size, '件（内キャッシュヒット:', (cached?.size ?? 0), '件）');
+      setProcessedElementsMap(newMap);
+      setIsProcessingElements(false);
+    })();
+
+    return () => { cancelled = true; };
+  }, [isLoaded, displayProducts, elements, taxSettings, summarizeFlags]);
 
   // --- プレビュースケールの動的計算 ---
   useEffect(() => {
@@ -348,6 +379,7 @@ function PrintContent() {
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent,
+                  overflow: 'hidden',
                 }}
               >
                 <div
@@ -365,6 +397,7 @@ function PrintContent() {
                     writingMode: processedElement.style.writingMode === 'vertical' ? 'vertical-rl' : 'horizontal-tb',
                     whiteSpace: processedElement.style.autoWrap ? 'pre-wrap' : 'nowrap',
                     ...(isDescription ? {} : { wordBreak: 'keep-all' as const, overflowWrap: 'break-word' as const }),
+                    overflow: 'hidden',
                     transform: processedElement.style.textWidth !== 100 ? `scaleX(${processedElement.style.textWidth / 100})` : undefined,
                     transformOrigin: 'left top',
                   }}
