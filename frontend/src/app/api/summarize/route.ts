@@ -1,10 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
+import Anthropic from '@anthropic-ai/sdk';
 
 /**
  * AI文章省略API
  * 長い商品説明文を指定文字数以内に要約する
- * Gemini API優先、なければOpenAI、なければ簡易省略
+ * Claude Haiku 4.5 を使用、APIキー未設定時は簡易省略にフォールバック
  */
+
+// プロンプトキャッシュ対象のシステムプロンプト（リクエスト間で固定）
+// 注: Haiku 4.5 の最小キャッシュ対象プレフィックスは 4096 トークン。
+// 現状この system は短いため実際にはキャッシュ発火しないが、
+// 将来プロンプトが伸びたとき自動的にキャッシュが効くようマーカーは付けておく。
+const SYSTEM_PROMPT = `あなたは小売店の商品POPに印刷する商品説明文を要約するアシスタントです。テキストボックスに収まるギリギリの長さで要約してください。
+
+最重要ルール：
+- 出力は依頼された文字数範囲を必ず守ってください
+- 下限未満の短い出力は禁止です。スペースを最大限活用してください
+- 目標は上限ギリギリです。余白を残さず情報を詰め込んでください
+
+その他のルール：
+- できるだけ元の文章の表現をそのまま残してください
+- 商品の特徴・魅力・産地・効能などのキーワードを優先的に残してください
+- 自然な日本語で完結した文章にしてください
+- 「...」や「等」は使わず、完結した文章にしてください
+- 改行は絶対に入れないでください。1行で出力してください
+- 要約した文章のみを出力してください（説明や前置きは不要）`;
+
+// SDKは ANTHROPIC_API_KEY を環境変数から自動的に読み込む
+const anthropicKey = process.env.ANTHROPIC_API_KEY;
+const client = anthropicKey ? new Anthropic() : null;
+
 export async function POST(request: NextRequest) {
   try {
     const { text, maxChars } = await request.json();
@@ -17,34 +42,16 @@ export async function POST(request: NextRequest) {
 
     const targetChars = maxChars || 50;
 
-    // Gemini API キーを確認（優先）
-    const geminiKey = process.env.GEMINI_API_KEY;
-    // OpenAI API キーを確認（フォールバック）
-    const openaiKey = process.env.OPENAI_API_KEY;
-
-    console.log('[Summarize API] API keys available:', {
-      hasGemini: !!geminiKey,
-      hasOpenAI: !!openaiKey
-    });
-
-    if (geminiKey) {
-      // Gemini API を使用して要約
-      console.log('[Summarize API] Using Gemini');
-      return await summarizeWithGemini(text, targetChars, geminiKey);
-    } else if (openaiKey) {
-      // OpenAI API を使用して要約
-      console.log('[Summarize API] Using OpenAI');
-      return await summarizeWithOpenAI(text, targetChars, openaiKey);
-    } else {
-      // APIキーがない場合は簡易的な省略処理を行う
-      console.log('[Summarize API] No API key, using simple summarize');
+    if (!client) {
+      console.log('[Summarize API] No ANTHROPIC_API_KEY, using simple summarize');
       return NextResponse.json({
         summarized: simpleSummarize(text, targetChars),
         method: 'simple',
-        message: 'APIキーが設定されていないため、簡易省略を適用しました',
+        message: 'ANTHROPIC_API_KEYが設定されていないため、簡易省略を適用しました',
       });
     }
 
+    return await summarizeWithClaude(text, targetChars, client);
   } catch (error) {
     console.error('[Summarize API] Error:', error);
     return NextResponse.json(
@@ -61,7 +68,6 @@ export async function POST(request: NextRequest) {
 function trimToFit(text: string, targetChars: number): string {
   if (text.length <= targetChars) return text;
 
-  // targetChars以内で最後の文末（。！？）を探す
   const truncated = text.substring(0, targetChars);
   const lastSentenceEnd = Math.max(
     truncated.lastIndexOf('。'),
@@ -69,219 +75,109 @@ function trimToFit(text: string, targetChars: number): string {
     truncated.lastIndexOf('？')
   );
 
-  // 文末がtargetCharsの80%以上の位置にあれば、そこで切って自然な終わり方にする
   if (lastSentenceEnd >= targetChars * 0.8) {
     return text.substring(0, lastSentenceEnd + 1);
   }
 
-  // 文末が遠い場合はギリギリまで使って…で終わる
   return text.substring(0, targetChars - 1) + '…';
 }
 
 /**
- * Gemini API で要約
+ * Claude Haiku 4.5 で要約
  * 戦略: LLMは文字数を過少に出力しがちなので、targetの130%で依頼し、
  * 返ってきた結果をtargetChars以内の文末でトリミングする
  */
-async function summarizeWithGemini(text: string, targetChars: number, apiKey: string) {
-  // 入力テキストから改行を削除
+async function summarizeWithClaude(text: string, targetChars: number, client: Anthropic) {
   const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
-
-  // LLMの過少出力を補正するため、多めに依頼
-  const requestChars = Math.floor(targetChars * 1.3);
+  const requestMaxChars = Math.floor(targetChars * 1.3);
   const requestMinChars = targetChars;
-  const isShortText = cleanText.length <= 50;
-  const prompt = isShortText
-    ? `以下のテキストを${requestMinChars}〜${requestChars}文字の範囲に短縮してください。
-ルール：
-- 出力は必ず${requestMinChars}文字以上、${requestChars}文字以下にしてください。短すぎるのはNGです
-- 商品名や固有名詞はできるだけ残してください
-- 内容量（g, ml等）は省略可能です
-- 改行は入れず1行で出力してください
-- 短縮したテキストのみを出力してください
 
-テキスト：${cleanText}`
-    : `あなたは商品説明文を要約するアシスタントです。テキストボックスに収まるギリギリの長さで要約してください。
-
-最重要ルール：
-- 出力は必ず${requestMinChars}文字以上、${requestChars}文字以下にしてください
-- ${requestMinChars}文字未満の短い出力は絶対にNGです。スペースを最大限活用してください
-- 目標は${requestChars}文字ギリギリです。余白を残さず情報を詰め込んでください
-
-その他のルール：
-- できるだけ元の文章の表現をそのまま残してください
-- 商品の特徴や魅力を維持してください
-- 自然な日本語で出力してください
-- 「...」や「等」は使わず、完結した文章にしてください
-- 重要なキーワード（産地、特徴、効能など）を優先的に残してください
-- 要約した文章のみを出力してください（説明や前置きは不要）
-- 改行は絶対に入れないでください。1行で出力してください
-
-以下の商品説明文を${requestMinChars}〜${requestChars}文字の範囲で要約してください：
+  const userPrompt = `以下の商品説明文を${requestMinChars}〜${requestMaxChars}文字の範囲で要約してください。
+出力は必ず${requestMinChars}文字以上、${requestMaxChars}文字以下にしてください。
 
 ${cleanText}`;
 
-  console.log('[Gemini] Sending request, targetChars:', targetChars, 'requestChars:', requestChars);
+  console.log('[Claude] Sending request, targetChars:', targetChars, 'requestMax:', requestMaxChars);
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 1024,
+      system: [
+        {
+          type: 'text',
+          text: SYSTEM_PROMPT,
+          cache_control: { type: 'ephemeral' },
         },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 300,
-          },
-        }),
-      }
-    );
+      ],
+      messages: [
+        { role: 'user', content: userPrompt },
+      ],
+    });
 
-    console.log('[Gemini] Response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Gemini] API error response:', errorText);
-      return NextResponse.json({
-        summarized: simpleSummarize(text, targetChars),
-        method: 'simple',
-        message: 'Gemini API エラーのため、簡易省略を適用しました',
-        debug: { status: response.status, error: errorText }
-      });
-    }
-
-    const data = await response.json();
-    console.log('[Gemini] Success, candidates:', data.candidates?.length);
-
-    // 出力から改行を削除して1行に
-    const rawSummarized = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    const rawSummarized = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('');
     const summarized = rawSummarized.replace(/\r?\n/g, '').trim();
 
     if (!summarized) {
+      console.warn('[Claude] Empty response, falling back to simple summarize');
       return NextResponse.json({
         summarized: simpleSummarize(text, targetChars),
         method: 'simple',
-        message: 'Gemini の応答が空のため、簡易省略を適用しました',
+        message: 'Claude の応答が空のため、簡易省略を適用しました',
       });
     }
 
-    // AI結果をtargetChars以内に文の区切りでトリミング
     const finalText = trimToFit(summarized, targetChars);
 
-    console.log('[Gemini] Result:', {
+    console.log('[Claude] Result:', {
       rawLength: summarized.length,
       finalLength: finalText.length,
       targetChars,
+      cacheRead: response.usage.cache_read_input_tokens,
+      cacheCreate: response.usage.cache_creation_input_tokens,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
     });
 
     return NextResponse.json({
       summarized: finalText,
-      method: 'gemini',
+      method: 'claude-haiku-4-5',
       originalLength: text.length,
       summarizedLength: finalText.length,
     });
-
   } catch (error) {
-    console.error('[Gemini] Exception:', error);
-    return NextResponse.json({
-      summarized: simpleSummarize(text, targetChars),
-      method: 'simple',
-      message: 'Gemini API エラーのため、簡易省略を適用しました',
-    });
-  }
-}
-
-/**
- * OpenAI API で要約
- * 同じく多めに依頼してトリミングする戦略
- */
-async function summarizeWithOpenAI(text: string, targetChars: number, apiKey: string) {
-  const requestChars = Math.floor(targetChars * 1.3);
-  const requestMinChars = targetChars;
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `あなたは商品説明文を要約するアシスタントです。テキストボックスに収まるギリギリの長さで要約してください。
-最重要ルール：
-- 出力は必ず${requestMinChars}文字以上、${requestChars}文字以下にしてください
-- ${requestMinChars}文字未満の短い出力は絶対にNGです。スペースを最大限活用してください
-- 目標は${requestChars}文字ギリギリです
-その他のルール：
-- できるだけ元の文章の表現をそのまま残してください
-- 商品の特徴や魅力を維持してください
-- 自然な日本語で、完結した文章にしてください
-- 重要なキーワード（産地、特徴、効能など）を優先的に残してください`,
-          },
-          {
-            role: 'user',
-            content: `以下の商品説明文を${requestMinChars}〜${requestChars}文字の範囲で要約してください：\n\n${text}`,
-          },
-        ],
-        max_tokens: 300,
-        temperature: 0.3,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      console.error('OpenAI API error:', error);
+    if (error instanceof Anthropic.AuthenticationError) {
+      console.error('[Claude] Authentication failed:', error.message);
       return NextResponse.json({
         summarized: simpleSummarize(text, targetChars),
         method: 'simple',
-        message: 'OpenAI API エラーのため、簡易省略を適用しました',
+        message: 'Claude API 認証エラーのため、簡易省略を適用しました',
       });
     }
-
-    const data = await response.json();
-    const summarized = data.choices[0]?.message?.content?.trim() || '';
-
-    if (!summarized) {
+    if (error instanceof Anthropic.RateLimitError) {
+      console.error('[Claude] Rate limit hit:', error.message);
       return NextResponse.json({
         summarized: simpleSummarize(text, targetChars),
         method: 'simple',
-        message: 'OpenAI の応答が空のため、簡易省略を適用しました',
+        message: 'Claude APIレート制限のため、簡易省略を適用しました',
       });
     }
-
-    // AI結果をtargetChars以内に文の区切りでトリミング
-    const finalText = trimToFit(summarized, targetChars);
-
-    console.log('[OpenAI] Result:', {
-      rawLength: summarized.length,
-      finalLength: finalText.length,
-      targetChars,
-    });
-
-    return NextResponse.json({
-      summarized: finalText,
-      method: 'openai',
-      originalLength: text.length,
-      summarizedLength: finalText.length,
-    });
-
-  } catch (error) {
-    console.error('OpenAI API error:', error);
+    if (error instanceof Anthropic.APIError) {
+      console.error('[Claude] API error:', error.status, error.message);
+      return NextResponse.json({
+        summarized: simpleSummarize(text, targetChars),
+        method: 'simple',
+        message: `Claude API エラー (${error.status}) のため、簡易省略を適用しました`,
+      });
+    }
+    console.error('[Claude] Unexpected exception:', error);
     return NextResponse.json({
       summarized: simpleSummarize(text, targetChars),
       method: 'simple',
-      message: 'OpenAI API エラーのため、簡易省略を適用しました',
+      message: 'Claude API 呼び出し失敗のため、簡易省略を適用しました',
     });
   }
 }
@@ -291,14 +187,12 @@ async function summarizeWithOpenAI(text: string, targetChars: number, apiKey: st
  * 文の区切りを考慮して省略する
  */
 function simpleSummarize(text: string, maxChars: number): string {
-  // 改行を削除して1行に
   const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
 
   if (cleanText.length <= maxChars) {
     return cleanText;
   }
 
-  // 句点、読点で区切って、収まる範囲で返す
   const sentences = cleanText.split(/([。、！？])/);
   let result = '';
 
@@ -311,13 +205,10 @@ function simpleSummarize(text: string, maxChars: number): string {
     }
   }
 
-  // 文の区切りベースの結果がmaxCharsの80%未満の場合、
-  // 元テキストを直接切り詰めてスペースを最大限活用する
   if (result.length < Math.floor(maxChars * 0.8)) {
     return cleanText.substring(0, maxChars - 1) + '…';
   }
 
-  // 最後が句点でない場合は「…」を追加
   if (!result.endsWith('。') && !result.endsWith('！') && !result.endsWith('？')) {
     if (result.length < maxChars) {
       result += '…';
