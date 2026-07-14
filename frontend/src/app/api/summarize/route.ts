@@ -246,6 +246,7 @@ ${cleanText}`;
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
+      codeVersion: 'v3-retry-90pct',
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
