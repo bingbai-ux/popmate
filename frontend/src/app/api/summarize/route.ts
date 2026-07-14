@@ -11,10 +11,15 @@ import Anthropic from '@anthropic-ai/sdk';
 // 注: Haiku 4.5 の最小キャッシュ対象プレフィックスは 4096 トークン。
 // 現状この system は短いため実際にはキャッシュ発火しないが、
 // 将来プロンプトが伸びたとき自動的にキャッシュが効くようマーカーは付けておく。
-const SYSTEM_PROMPT = `あなたは小売店の商品POPに印刷する商品説明文を要約するアシスタントです。テキストボックスに収まるギリギリの長さで、必ず完結した文で要約してください。
+const SYSTEM_PROMPT = `あなたは小売店の商品POPに印刷する商品説明文を要約するアシスタントです。テキストボックスの余白ができないよう、指定された最大文字数のギリギリまで情報を詰め込んで要約してください。
 
-絶対厳守ルール：
+長さの絶対厳守ルール（超重要）：
 - 出力は指定された最大文字数を1文字も超えない
+- 出力は指定された最小文字数を必ず上回る（下回るのは失格）
+- 目標は最大文字数の直前（例: 上限80文字なら75〜80文字）。可能な限り上限に近づける
+- 情報を絞りすぎない。元の文章の魅力・産地・特徴・効能・使い方などを最大限盛り込む
+
+書き方の絶対厳守ルール：
 - 出力の最後は必ず「。」「！」「？」のいずれかで終わる完結した文にする
 - 「…」「...」「等」「〜」などの省略記号・省略語は絶対に使わない（途中で切ったような表現は禁止）
 - 文の途中で終わらせない。最後まで自然に言い切る
@@ -101,46 +106,94 @@ function trimToFit(text: string, targetChars: number): string {
  * Claude は指示追従が良いので、原則としてこれで target 以内に収まり
  * 末尾も自然に「。」で終わる。trimToFit は保険。
  */
-async function summarizeWithClaude(text: string, targetChars: number, client: Anthropic) {
-  const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
-  // ボックスを活かすため下限を設けつつ、上限は絶対厳守
-  const requestMinChars = Math.max(20, Math.floor(targetChars * 0.85));
-  const requestMaxChars = targetChars;
+function buildUserPrompt(cleanText: string, minChars: number, maxChars: number): string {
+  return `以下の商品説明文を要約してください。
 
-  const userPrompt = `以下の商品説明文を要約してください。
+長さの厳守事項：
+- 出力は必ず${minChars}文字以上、${maxChars}文字以下（${maxChars}文字を1文字でも超えたら失格）
+- 目標は${maxChars}文字ギリギリ。${minChars}文字未満は禁止。余白を残さず情報を詰め込む
+- 短くまとめすぎず、元の商品説明の魅力・特徴・産地・効能などを最大限盛り込む
 
-厳守事項：
-- 出力は${requestMinChars}文字以上、${requestMaxChars}文字以下（${requestMaxChars}文字を1文字でも超えたら失格）
+書き方の厳守事項：
 - 最後は必ず「。」で終わる完結した文にする
 - 「…」「...」「等」などの省略記号・省略語は絶対に使わない
 
 ${cleanText}`;
+}
 
-  console.log('[Claude] Sending request, targetChars:', targetChars, 'requestRange:', `${requestMinChars}-${requestMaxChars}`);
+type ClaudeCallResult = {
+  text: string;
+  usage: {
+    input: number;
+    output: number;
+    cacheRead: number | null;
+    cacheCreate: number | null;
+  };
+};
+
+async function callClaude(client: Anthropic, userPrompt: string): Promise<ClaudeCallResult> {
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5',
+    max_tokens: 1024,
+    system: [
+      {
+        type: 'text',
+        text: SYSTEM_PROMPT,
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+
+  const raw = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+  return {
+    text: raw.replace(/\r?\n/g, '').trim(),
+    usage: {
+      input: response.usage.input_tokens,
+      output: response.usage.output_tokens,
+      cacheRead: response.usage.cache_read_input_tokens,
+      cacheCreate: response.usage.cache_creation_input_tokens,
+    },
+  };
+}
+
+async function summarizeWithClaude(text: string, targetChars: number, client: Anthropic) {
+  const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+  // ボックスを活かすため下限を設けつつ、上限は絶対厳守
+  const requestMinChars = Math.max(20, Math.floor(targetChars * 0.9));
+  const requestMaxChars = targetChars;
 
   try {
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 1024,
-      system: [
-        {
-          type: 'text',
-          text: SYSTEM_PROMPT,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [
-        { role: 'user', content: userPrompt },
-      ],
+    const firstPrompt = buildUserPrompt(cleanText, requestMinChars, requestMaxChars);
+    console.log('[Claude] Request 1:', {
+      targetChars,
+      range: `${requestMinChars}-${requestMaxChars}`,
+      orig: cleanText.length,
     });
 
-    const rawSummarized = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
-    const summarized = rawSummarized.replace(/\r?\n/g, '').trim();
+    let result = await callClaude(client, firstPrompt);
+    let attempt = 1;
 
-    if (!summarized) {
+    // 下限を下回った かつ 元テキストに詰め込む余地がある場合のみ、1回だけ再依頼
+    const minAcceptable = Math.floor(targetChars * 0.85);
+    const hasHeadroom = cleanText.length > targetChars * 1.1;
+    if (result.text && result.text.length < minAcceptable && hasHeadroom) {
+      console.log('[Claude] Retry: output', result.text.length, '<', minAcceptable);
+      const retryPrompt = `${firstPrompt}
+
+前回の要約結果:「${result.text}」（${result.text.length}文字）
+これは短すぎます。もっと元文の情報を盛り込んで、必ず${requestMinChars}〜${requestMaxChars}文字の範囲で書き直してください。`;
+      const retryResult = await callClaude(client, retryPrompt);
+      if (retryResult.text && retryResult.text.length >= result.text.length) {
+        result = retryResult;
+        attempt = 2;
+      }
+    }
+
+    if (!result.text) {
       console.warn('[Claude] Empty response, falling back to simple summarize');
       return NextResponse.json({
         summarized: simpleSummarize(text, targetChars),
@@ -149,16 +202,15 @@ ${cleanText}`;
       });
     }
 
-    const finalText = trimToFit(summarized, targetChars);
+    const finalText = trimToFit(result.text, targetChars);
 
     console.log('[Claude] Result:', {
-      rawLength: summarized.length,
+      attempt,
+      rawLength: result.text.length,
       finalLength: finalText.length,
       targetChars,
-      cacheRead: response.usage.cache_read_input_tokens,
-      cacheCreate: response.usage.cache_creation_input_tokens,
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
+      fillRate: `${Math.round((finalText.length / targetChars) * 100)}%`,
+      usage: result.usage,
     });
 
     return NextResponse.json({
@@ -166,6 +218,7 @@ ${cleanText}`;
       method: 'claude-haiku-4-5',
       originalLength: text.length,
       summarizedLength: finalText.length,
+      attempts: attempt,
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
