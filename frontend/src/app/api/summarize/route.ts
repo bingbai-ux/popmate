@@ -180,28 +180,31 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
     let result = await callClaude(client, firstPrompt);
     let attempts = 1;
 
-    // 90%未満で かつ 元文に詰め込む余地がある場合、最大2回まで再依頼して
-    // 一番充填率の高いものを採用する（合計最大3回のAPI呼び出し）
+    // 90%未満で かつ 元文に詰め込む余地がある場合、最大3回まで再依頼して
+    // 一番充填率の高いものを採用する（合計最大4回のAPI呼び出し）
     const minAcceptable = Math.floor(targetChars * 0.9);
     const hasHeadroom = cleanText.length > targetChars * 1.1;
+    const MAX_ATTEMPTS = 4;
 
     while (
-      attempts < 3 &&
+      attempts < MAX_ATTEMPTS &&
       result.text &&
       result.text.length < minAcceptable &&
       hasHeadroom
     ) {
+      const deficit = requestMaxChars - result.text.length;
       console.log('[Claude] Retry:', {
         attempt: attempts,
         outputLen: result.text.length,
         threshold: minAcceptable,
+        deficit,
       });
       const retryPrompt = `以下の商品説明文を、${requestMinChars}文字以上${requestMaxChars}文字以下で要約してください。
 
-前回のあなたの要約(${result.text.length}文字)は短すぎました:
+前回のあなたの要約は${result.text.length}文字で、あと約${deficit}文字足りません:
 「${result.text}」
 
-前回落ちた元文の魅力・特徴・産地・使い方などをできる限り拾って、${requestMaxChars}文字ギリギリまで詰め込んで書き直してください。
+元文にはまだ盛り込める情報（魅力・特徴・産地・効能・使い方・具体的な数値など）が残っています。それらを追加して、必ず${requestMinChars}〜${requestMaxChars}文字まで伸ばして書き直してください。前回と同じ内容の繰り返しではなく、新しい情報を足すこと。
 
 厳守事項：
 - 出力は${requestMinChars}文字以上、${requestMaxChars}文字以下（${requestMaxChars}文字を1文字でも超えたら失格）
@@ -249,7 +252,7 @@ ${cleanText}`;
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
-      codeVersion: 'v5-smart-trim',
+      codeVersion: 'v6-retry4',
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
