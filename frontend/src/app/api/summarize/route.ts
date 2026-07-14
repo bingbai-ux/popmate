@@ -69,8 +69,9 @@ export async function POST(request: NextRequest) {
 /**
  * AI要約結果をtargetChars以内に自然な文末で切り詰める。
  * 「…」は絶対に付けない。優先順位:
- *   1. targetChars以内の最後の句点(。！？) で切る（位置は問わない）
- *   2. targetChars以内の最後の読点(、) で切って「。」を付ける
+ *   1. targetChars以内かつ target の 70% 以降の位置にある最後の句点(。！？) を使う
+ *      （目標長にできるだけ近い位置で自然に終わらせるため、序盤の句点は無視）
+ *   2. targetChars以内かつ target の 50% 以降の読点(、) で切って「。」を付ける
  *   3. 最終手段: ハードカット後に「。」を付ける
  */
 function trimToFit(text: string, targetChars: number): string {
@@ -80,19 +81,21 @@ function trimToFit(text: string, targetChars: number): string {
 
   const truncated = cleaned.substring(0, targetChars);
 
-  // 1. 句点で終わる箇所を探す（位置制約なし）
+  // 1. 目標長の70%以降にある句点なら使う（早すぎる句点は捨てる）
+  const sentenceFloor = Math.floor(targetChars * 0.7);
   const lastSentenceEnd = Math.max(
     truncated.lastIndexOf('。'),
     truncated.lastIndexOf('！'),
     truncated.lastIndexOf('？')
   );
-  if (lastSentenceEnd >= 0) {
+  if (lastSentenceEnd >= sentenceFloor) {
     return cleaned.substring(0, lastSentenceEnd + 1);
   }
 
-  // 2. 読点で切って句点を付ける（読点が先頭付近しかない場合は使わない）
+  // 2. 目標長の50%以降にある読点で切って句点を付ける
+  const commaFloor = Math.floor(targetChars * 0.5);
   const lastComma = truncated.lastIndexOf('、');
-  if (lastComma >= targetChars * 0.3) {
+  if (lastComma >= commaFloor) {
     return cleaned.substring(0, lastComma) + '。';
   }
 
@@ -176,20 +179,11 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
 
     let result = await callClaude(client, firstPrompt);
     let attempts = 1;
-    const firstPassLen = result.text.length;
 
     // 90%未満で かつ 元文に詰め込む余地がある場合、最大2回まで再依頼して
     // 一番充填率の高いものを採用する（合計最大3回のAPI呼び出し）
     const minAcceptable = Math.floor(targetChars * 0.9);
     const hasHeadroom = cleanText.length > targetChars * 1.1;
-    const willRetry = result.text.length < minAcceptable && hasHeadroom;
-    console.log('[Claude] Retry check:', {
-      firstPassLen,
-      minAcceptable,
-      cleanLen: cleanText.length,
-      hasHeadroom,
-      willRetry,
-    });
 
     while (
       attempts < 3 &&
@@ -255,14 +249,7 @@ ${cleanText}`;
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
-      codeVersion: 'v4-debug',
-      debug: {
-        firstPassLen,
-        minAcceptable,
-        cleanLen: cleanText.length,
-        hasHeadroom,
-        rawResultLen: result.text.length,
-      },
+      codeVersion: 'v5-smart-trim',
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
