@@ -176,11 +176,20 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
 
     let result = await callClaude(client, firstPrompt);
     let attempts = 1;
+    const firstPassLen = result.text.length;
 
     // 90%未満で かつ 元文に詰め込む余地がある場合、最大2回まで再依頼して
     // 一番充填率の高いものを採用する（合計最大3回のAPI呼び出し）
     const minAcceptable = Math.floor(targetChars * 0.9);
     const hasHeadroom = cleanText.length > targetChars * 1.1;
+    const willRetry = result.text.length < minAcceptable && hasHeadroom;
+    console.log('[Claude] Retry check:', {
+      firstPassLen,
+      minAcceptable,
+      cleanLen: cleanText.length,
+      hasHeadroom,
+      willRetry,
+    });
 
     while (
       attempts < 3 &&
@@ -246,7 +255,14 @@ ${cleanText}`;
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
-      codeVersion: 'v3-retry-90pct',
+      codeVersion: 'v4-debug',
+      debug: {
+        firstPassLen,
+        minAcceptable,
+        cleanLen: cleanText.length,
+        hasHeadroom,
+        rawResultLen: result.text.length,
+      },
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
