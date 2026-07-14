@@ -175,21 +175,48 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
     });
 
     let result = await callClaude(client, firstPrompt);
-    let attempt = 1;
+    let attempts = 1;
 
-    // 下限を下回った かつ 元テキストに詰め込む余地がある場合のみ、1回だけ再依頼
-    const minAcceptable = Math.floor(targetChars * 0.85);
+    // 90%未満で かつ 元文に詰め込む余地がある場合、最大2回まで再依頼して
+    // 一番充填率の高いものを採用する（合計最大3回のAPI呼び出し）
+    const minAcceptable = Math.floor(targetChars * 0.9);
     const hasHeadroom = cleanText.length > targetChars * 1.1;
-    if (result.text && result.text.length < minAcceptable && hasHeadroom) {
-      console.log('[Claude] Retry: output', result.text.length, '<', minAcceptable);
-      const retryPrompt = `${firstPrompt}
 
-前回の要約結果:「${result.text}」（${result.text.length}文字）
-これは短すぎます。もっと元文の情報を盛り込んで、必ず${requestMinChars}〜${requestMaxChars}文字の範囲で書き直してください。`;
+    while (
+      attempts < 3 &&
+      result.text &&
+      result.text.length < minAcceptable &&
+      hasHeadroom
+    ) {
+      console.log('[Claude] Retry:', {
+        attempt: attempts,
+        outputLen: result.text.length,
+        threshold: minAcceptable,
+      });
+      const retryPrompt = `以下の商品説明文を、${requestMinChars}文字以上${requestMaxChars}文字以下で要約してください。
+
+前回のあなたの要約(${result.text.length}文字)は短すぎました:
+「${result.text}」
+
+前回落ちた元文の魅力・特徴・産地・使い方などをできる限り拾って、${requestMaxChars}文字ギリギリまで詰め込んで書き直してください。
+
+厳守事項：
+- 出力は${requestMinChars}文字以上、${requestMaxChars}文字以下（${requestMaxChars}文字を1文字でも超えたら失格）
+- 最後は必ず「。」で終わる完結した文
+- 「…」「等」「〜」などの省略記号・省略語は禁止
+- 要約文のみを1行で出力
+
+元文（${cleanText.length}文字）:
+${cleanText}`;
+
       const retryResult = await callClaude(client, retryPrompt);
-      if (retryResult.text && retryResult.text.length >= result.text.length) {
+      attempts += 1;
+      // より長い結果が来たら採用（上限内である前提で trimToFit が保険）
+      if (retryResult.text && retryResult.text.length > result.text.length) {
         result = retryResult;
-        attempt = 2;
+      } else {
+        // 改善しなかったのでそれ以上リトライしない（Claude が既に飽和）
+        break;
       }
     }
 
@@ -205,7 +232,7 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
     const finalText = trimToFit(result.text, targetChars);
 
     console.log('[Claude] Result:', {
-      attempt,
+      attempts,
       rawLength: result.text.length,
       finalLength: finalText.length,
       targetChars,
@@ -218,7 +245,7 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
       method: 'claude-haiku-4-5',
       originalLength: text.length,
       summarizedLength: finalText.length,
-      attempts: attempt,
+      attempts,
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
