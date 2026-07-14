@@ -11,20 +11,20 @@ import Anthropic from '@anthropic-ai/sdk';
 // 注: Haiku 4.5 の最小キャッシュ対象プレフィックスは 4096 トークン。
 // 現状この system は短いため実際にはキャッシュ発火しないが、
 // 将来プロンプトが伸びたとき自動的にキャッシュが効くようマーカーは付けておく。
-const SYSTEM_PROMPT = `あなたは小売店の商品POPに印刷する商品説明文を要約するアシスタントです。テキストボックスに収まるギリギリの長さで要約してください。
+const SYSTEM_PROMPT = `あなたは小売店の商品POPに印刷する商品説明文を要約するアシスタントです。テキストボックスに収まるギリギリの長さで、必ず完結した文で要約してください。
 
-最重要ルール：
-- 出力は依頼された文字数範囲を必ず守ってください
-- 下限未満の短い出力は禁止です。スペースを最大限活用してください
-- 目標は上限ギリギリです。余白を残さず情報を詰め込んでください
+絶対厳守ルール：
+- 出力は指定された最大文字数を1文字も超えない
+- 出力の最後は必ず「。」「！」「？」のいずれかで終わる完結した文にする
+- 「…」「...」「等」「〜」などの省略記号・省略語は絶対に使わない（途中で切ったような表現は禁止）
+- 文の途中で終わらせない。最後まで自然に言い切る
 
 その他のルール：
-- できるだけ元の文章の表現をそのまま残してください
-- 商品の特徴・魅力・産地・効能などのキーワードを優先的に残してください
-- 自然な日本語で完結した文章にしてください
-- 「...」や「等」は使わず、完結した文章にしてください
-- 改行は絶対に入れないでください。1行で出力してください
-- 要約した文章のみを出力してください（説明や前置きは不要）`;
+- 商品の特徴・魅力・産地・効能などのキーワードを優先的に残す
+- できるだけ元の文章の表現を活かす
+- 自然な日本語で1文または複数文を組み合わせる
+- 改行は絶対に入れず1行で出力する
+- 要約した文章のみを出力する（説明や前置きは不要）`;
 
 // SDKは ANTHROPIC_API_KEY を環境変数から自動的に読み込む
 const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -62,42 +62,61 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * AI要約結果をtargetChars以内に文の区切りでトリミング
- * 自然な文末（。！？）で切ることで、要約として自然な形を保つ
+ * AI要約結果をtargetChars以内に自然な文末で切り詰める。
+ * 「…」は絶対に付けない。優先順位:
+ *   1. targetChars以内の最後の句点(。！？) で切る（位置は問わない）
+ *   2. targetChars以内の最後の読点(、) で切って「。」を付ける
+ *   3. 最終手段: ハードカット後に「。」を付ける
  */
 function trimToFit(text: string, targetChars: number): string {
-  if (text.length <= targetChars) return text;
+  // AIが指示に反して末尾に「…」等を付けてきた場合に備えて除去
+  const cleaned = text.replace(/[…]+$/, '').replace(/\.{2,}$/, '').trim();
+  if (cleaned.length <= targetChars) return cleaned;
 
-  const truncated = text.substring(0, targetChars);
+  const truncated = cleaned.substring(0, targetChars);
+
+  // 1. 句点で終わる箇所を探す（位置制約なし）
   const lastSentenceEnd = Math.max(
     truncated.lastIndexOf('。'),
     truncated.lastIndexOf('！'),
     truncated.lastIndexOf('？')
   );
-
-  if (lastSentenceEnd >= targetChars * 0.8) {
-    return text.substring(0, lastSentenceEnd + 1);
+  if (lastSentenceEnd >= 0) {
+    return cleaned.substring(0, lastSentenceEnd + 1);
   }
 
-  return text.substring(0, targetChars - 1) + '…';
+  // 2. 読点で切って句点を付ける（読点が先頭付近しかない場合は使わない）
+  const lastComma = truncated.lastIndexOf('、');
+  if (lastComma >= targetChars * 0.3) {
+    return cleaned.substring(0, lastComma) + '。';
+  }
+
+  // 3. 最終手段: ハードカット + 「。」（「…」は付けない）
+  return cleaned.substring(0, targetChars - 1) + '。';
 }
 
 /**
  * Claude Haiku 4.5 で要約
- * 戦略: LLMは文字数を過少に出力しがちなので、targetの130%で依頼し、
- * 返ってきた結果をtargetChars以内の文末でトリミングする
+ * 戦略: 文字数の上限を厳守 + 「。」で終わる完結した文を依頼。
+ * Claude は指示追従が良いので、原則としてこれで target 以内に収まり
+ * 末尾も自然に「。」で終わる。trimToFit は保険。
  */
 async function summarizeWithClaude(text: string, targetChars: number, client: Anthropic) {
   const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
-  const requestMaxChars = Math.floor(targetChars * 1.3);
-  const requestMinChars = targetChars;
+  // ボックスを活かすため下限を設けつつ、上限は絶対厳守
+  const requestMinChars = Math.max(20, Math.floor(targetChars * 0.85));
+  const requestMaxChars = targetChars;
 
-  const userPrompt = `以下の商品説明文を${requestMinChars}〜${requestMaxChars}文字の範囲で要約してください。
-出力は必ず${requestMinChars}文字以上、${requestMaxChars}文字以下にしてください。
+  const userPrompt = `以下の商品説明文を要約してください。
+
+厳守事項：
+- 出力は${requestMinChars}文字以上、${requestMaxChars}文字以下（${requestMaxChars}文字を1文字でも超えたら失格）
+- 最後は必ず「。」で終わる完結した文にする
+- 「…」「...」「等」などの省略記号・省略語は絶対に使わない
 
 ${cleanText}`;
 
-  console.log('[Claude] Sending request, targetChars:', targetChars, 'requestMax:', requestMaxChars);
+  console.log('[Claude] Sending request, targetChars:', targetChars, 'requestRange:', `${requestMinChars}-${requestMaxChars}`);
 
   try {
     const response = await client.messages.create({
@@ -183,37 +202,11 @@ ${cleanText}`;
 }
 
 /**
- * 簡易的なテキスト省略（AIなし）
- * 文の区切りを考慮して省略する
+ * 簡易的なテキスト省略（AIなし・APIキー無しやエラー時のフォールバック）
+ * 「…」は付けず、trimToFit と同じ方針で自然な文末に丸める。
  */
 function simpleSummarize(text: string, maxChars: number): string {
   const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
-
-  if (cleanText.length <= maxChars) {
-    return cleanText;
-  }
-
-  const sentences = cleanText.split(/([。、！？])/);
-  let result = '';
-
-  for (let i = 0; i < sentences.length; i++) {
-    const next = result + sentences[i];
-    if (next.length <= maxChars - 1) {
-      result = next;
-    } else {
-      break;
-    }
-  }
-
-  if (result.length < Math.floor(maxChars * 0.8)) {
-    return cleanText.substring(0, maxChars - 1) + '…';
-  }
-
-  if (!result.endsWith('。') && !result.endsWith('！') && !result.endsWith('？')) {
-    if (result.length < maxChars) {
-      result += '…';
-    }
-  }
-
-  return result;
+  if (cleanText.length <= maxChars) return cleanText;
+  return trimToFit(cleanText, maxChars);
 }
