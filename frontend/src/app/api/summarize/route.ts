@@ -24,9 +24,11 @@ const SYSTEM_PROMPT = `あなたは小売店の商品POPを書くプロのコピ
 - 同じ意味の言葉の繰り返しを避ける（例:「ハイドロソル」と「芳香蒸留水」を両方入れて冗長にしない）
 - 商品の特徴・魅力・産地・効能・使い方のうち、魅力が伝わるものを自然に盛り込む
 
-長さ：
-- 目安は指定された文字数の範囲だが、文字数を埋めるために文法や自然さを犠牲にしては絶対にいけない
-- 収まりきらない・埋まりきらない場合は、無理に詰め込まず、完結した自然な文で終える方を優先する
+長さ（重要）：
+- 指定された最大文字数を絶対に超えない
+- その範囲内で、完結した文をできるだけ入れて枠を埋める。1文で足りなければ2文3文と続けてよい
+- ただし次の一文を入れると最大文字数を超える場合は、その文を入れず、前の文で自然に止める（文を途中で切ってはいけない）
+- 文字数を埋めるために不自然な言い回しや冗長な繰り返しをしてはいけない。自然さが最優先
 
 体裁：
 - 「…」「〜」「等」などの省略表現は使わない
@@ -126,8 +128,9 @@ function trimToFit(text: string, targetChars: number): string {
 function buildUserPrompt(cleanText: string, minChars: number, maxChars: number): string {
   return `次の商品説明をもとに、店頭POPに印刷する紹介文を書いてください。
 
-・長さの目安は${minChars}〜${maxChars}文字程度（${maxChars}文字を大きく超えない範囲で）。ただし文字数のために文法や自然さを崩さないこと。埋まらなければ短くてよい
-・一文ずつ必ず言い切って、紹介文として自然に読める完結した文章にする
+・${maxChars}文字を絶対に超えないこと。その範囲でできるだけ${minChars}文字以上になるよう、完結した文を必要なだけ続けて枠を埋める
+・次の一文を足すと${maxChars}文字を超えるなら、その文は入れず前の文で止める。文を途中で切るのは禁止
+・一文ずつ必ず言い切り、紹介文として自然に読める文章にする（不自然な詰め込み・冗長な繰り返しはしない）
 ・元の説明にない事実は足さない
 
 商品説明：
@@ -264,12 +267,10 @@ ${cleanText}`;
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
-      codeVersion: 'v7-retry75',
+      codeVersion: 'v8-fit-sentences',
       debug: {
         firstPassLen,
-        tooShort,
-        hasHeadroom,
-        cleanLen: cleanText.length,
+        finalLen: finalText.length,
       },
     });
   } catch (error) {
