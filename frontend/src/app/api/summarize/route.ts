@@ -198,7 +198,6 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
 
     let result = await callClaude(client, firstPrompt);
     let attempts = 1;
-    const firstPassLen = result.text.length;
 
     const tooShort = Math.floor(targetChars * 0.75);
     const hasHeadroom = cleanText.length > targetChars * 1.1;
@@ -283,11 +282,6 @@ ${cleanText}`;
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
-      codeVersion: 'v10-fit-in-box',
-      debug: {
-        firstPassLen,
-        finalLen: finalText.length,
-      },
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
