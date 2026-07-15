@@ -11,25 +11,27 @@ import Anthropic from '@anthropic-ai/sdk';
 // 注: Haiku 4.5 の最小キャッシュ対象プレフィックスは 4096 トークン。
 // 現状この system は短いため実際にはキャッシュ発火しないが、
 // 将来プロンプトが伸びたとき自動的にキャッシュが効くようマーカーは付けておく。
-const SYSTEM_PROMPT = `あなたは小売店の商品POPに印刷する商品説明文を要約するアシスタントです。テキストボックスの余白ができないよう、指定された最大文字数のギリギリまで情報を詰め込んで要約してください。
+const SYSTEM_PROMPT = `あなたは小売店の商品POPを書くプロのコピーライターです。元の商品説明をもとに、そのまま店頭に印刷して出せる、自然で完結した紹介文を書いてください。
 
-長さの絶対厳守ルール（超重要）：
-- 出力は指定された最大文字数を1文字も超えない
-- 出力は指定された最小文字数を必ず上回る（下回るのは失格）
-- 目標は最大文字数の直前（例: 上限80文字なら75〜80文字）。可能な限り上限に近づける
-- 情報を絞りすぎない。元の文章の魅力・産地・特徴・効能・使い方などを最大限盛り込む
+最優先事項（文章として成立していること）：
+- 一文一文を必ず述語まで書ききった、文法的に完全な文にする
+- 「〜をブレンド。」「〜をサポートし。」「〜蒸留水で。」のような、動詞の途中や助詞で切れた不完全な表現は絶対に禁止。必ず「〜します。」「〜です。」など言い切る
+- 商品を知らないお客様が読んで、魅力が自然に伝わる、なめらかな紹介文にする
+- 主語や修飾の係り受けが破綻していないか確認する（例:「潤いを与え天然成分が整えます」のように主語が二重にならないよう、適切に読点や接続で整える）
 
-書き方の絶対厳守ルール：
-- 出力の最後は必ず「。」「！」「？」のいずれかで終わる完結した文にする
-- 「…」「...」「等」「〜」などの省略記号・省略語は絶対に使わない（途中で切ったような表現は禁止）
-- 文の途中で終わらせない。最後まで自然に言い切る
+内容のルール：
+- 元の説明に書かれていない事実を創作しない。産地・成分・効能などは元文の範囲内で
+- 同じ意味の言葉の繰り返しを避ける（例:「ハイドロソル」と「芳香蒸留水」を両方入れて冗長にしない）
+- 商品の特徴・魅力・産地・効能・使い方のうち、魅力が伝わるものを自然に盛り込む
 
-その他のルール：
-- 商品の特徴・魅力・産地・効能などのキーワードを優先的に残す
-- できるだけ元の文章の表現を活かす
-- 自然な日本語で1文または複数文を組み合わせる
-- 改行は絶対に入れず1行で出力する
-- 要約した文章のみを出力する（説明や前置きは不要）`;
+長さ：
+- 目安は指定された文字数の範囲だが、文字数を埋めるために文法や自然さを犠牲にしては絶対にいけない
+- 収まりきらない・埋まりきらない場合は、無理に詰め込まず、完結した自然な文で終える方を優先する
+
+体裁：
+- 「…」「〜」「等」などの省略表現は使わない
+- 改行は入れず1行で出力する
+- 紹介文の本文のみを出力する（前置きや説明は不要）`;
 
 // SDKは ANTHROPIC_API_KEY を環境変数から自動的に読み込む
 const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -117,22 +119,18 @@ function trimToFit(text: string, targetChars: number): string {
 
 /**
  * Claude Haiku 4.5 で要約
- * 戦略: 文字数の上限を厳守 + 「。」で終わる完結した文を依頼。
- * Claude は指示追従が良いので、原則としてこれで target 以内に収まり
- * 末尾も自然に「。」で終わる。trimToFit は保険。
+ * 戦略: 「店頭に出せる自然で完結した紹介文」を最優先し、文字数は目安として扱う。
+ * 文字数を埋めるための詰め込みはしない（不自然な体言止めや係り受け破綻の原因になる）。
+ * trimToFit は上限を大きく超えた時だけ、文の区切りで丸める保険。
  */
 function buildUserPrompt(cleanText: string, minChars: number, maxChars: number): string {
-  return `以下の商品説明文を要約してください。
+  return `次の商品説明をもとに、店頭POPに印刷する紹介文を書いてください。
 
-長さの厳守事項：
-- 出力は必ず${minChars}文字以上、${maxChars}文字以下（${maxChars}文字を1文字でも超えたら失格）
-- 目標は${maxChars}文字ギリギリ。${minChars}文字未満は禁止。余白を残さず情報を詰め込む
-- 短くまとめすぎず、元の商品説明の魅力・特徴・産地・効能などを最大限盛り込む
+・長さの目安は${minChars}〜${maxChars}文字程度（${maxChars}文字を大きく超えない範囲で）。ただし文字数のために文法や自然さを崩さないこと。埋まらなければ短くてよい
+・一文ずつ必ず言い切って、紹介文として自然に読める完結した文章にする
+・元の説明にない事実は足さない
 
-書き方の厳守事項：
-- 最後は必ず「。」で終わる完結した文にする
-- 「…」「...」「等」などの省略記号・省略語は絶対に使わない
-
+商品説明：
 ${cleanText}`;
 }
 
@@ -177,8 +175,8 @@ async function callClaude(client: Anthropic, userPrompt: string): Promise<Claude
 
 async function summarizeWithClaude(text: string, targetChars: number, client: Anthropic) {
   const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
-  // ボックスを活かすため下限を設けつつ、上限は絶対厳守
-  const requestMinChars = Math.max(20, Math.floor(targetChars * 0.9));
+  // 目安レンジ。下限は自然さを優先して緩め（詰め込みで文章が壊れるのを防ぐ）
+  const requestMinChars = Math.max(20, Math.floor(targetChars * 0.75));
   const requestMaxChars = targetChars;
 
   try {
@@ -192,49 +190,36 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
     let result = await callClaude(client, firstPrompt);
     let attempts = 1;
 
-    // 90%未満で かつ 元文に詰め込む余地がある場合、最大3回まで再依頼して
-    // 一番充填率の高いものを採用する（合計最大4回のAPI呼び出し）
-    const minAcceptable = Math.floor(targetChars * 0.9);
+    // 極端に短い（目安の60%未満）かつ元文に余地がある場合のみ、1回だけ再依頼。
+    // 文字数を埋めるための積極的なリトライはしない（詰め込みで文章が不自然に
+    // なるため）。あくまで「明らかにスカスカ」を救済する程度に留める。
+    const tooShort = Math.floor(targetChars * 0.6);
     const hasHeadroom = cleanText.length > targetChars * 1.1;
-    const MAX_ATTEMPTS = 4;
 
-    while (
-      attempts < MAX_ATTEMPTS &&
-      result.text &&
-      result.text.length < minAcceptable &&
-      hasHeadroom
-    ) {
-      const deficit = requestMaxChars - result.text.length;
-      console.log('[Claude] Retry:', {
-        attempt: attempts,
+    if (result.text && result.text.length < tooShort && hasHeadroom) {
+      console.log('[Claude] Retry (too short):', {
         outputLen: result.text.length,
-        threshold: minAcceptable,
-        deficit,
+        threshold: tooShort,
       });
-      const retryPrompt = `以下の商品説明文を、${requestMinChars}文字以上${requestMaxChars}文字以下で要約してください。
+      const retryPrompt = `次の商品説明をもとに、店頭POPの紹介文を書いてください。
 
-前回のあなたの要約は${result.text.length}文字で、あと約${deficit}文字足りません:
+前回の紹介文は${result.text.length}文字と少し短めでした:
 「${result.text}」
 
-元文にはまだ盛り込める情報（魅力・特徴・産地・効能・使い方・具体的な数値など）が残っています。それらを追加して、必ず${requestMinChars}〜${requestMaxChars}文字まで伸ばして書き直してください。前回と同じ内容の繰り返しではなく、新しい情報を足すこと。
+元の説明にはまだ伝えられる魅力（特徴・産地・効能・使い方など）が残っています。それを自然に加えて、${requestMinChars}〜${requestMaxChars}文字程度に膨らませてください。ただし、文字数のために不自然な言い回しや途中で切れた文にしては絶対にいけません。あくまで自然で完結した紹介文にすること。
 
-厳守事項：
-- 出力は${requestMinChars}文字以上、${requestMaxChars}文字以下（${requestMaxChars}文字を1文字でも超えたら失格）
-- 最後は必ず「。」で終わる完結した文
-- 「…」「等」「〜」などの省略記号・省略語は禁止
-- 要約文のみを1行で出力
-
-元文（${cleanText.length}文字）:
+商品説明：
 ${cleanText}`;
 
       const retryResult = await callClaude(client, retryPrompt);
       attempts += 1;
-      // より長い結果が来たら採用（上限内である前提で trimToFit が保険）
-      if (retryResult.text && retryResult.text.length > result.text.length) {
+      // 前回より長く、かつ上限を大きく超えていなければ採用
+      if (
+        retryResult.text &&
+        retryResult.text.length > result.text.length &&
+        retryResult.text.length <= Math.ceil(requestMaxChars * 1.15)
+      ) {
         result = retryResult;
-      } else {
-        // 改善しなかったのでそれ以上リトライしない（Claude が既に飽和）
-        break;
       }
     }
 
