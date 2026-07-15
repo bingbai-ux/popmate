@@ -71,29 +71,19 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * AI要約結果をtargetChars付近で「文法的に自然な文末」に丸める。
- * 「です」を「で」で切るような不完全な語尾を絶対に作らない。優先順位:
- *   1. わずかな超過(〜108%)で末尾が句点(。！？)なら、そのまま採用
- *      （数文字はみ出しても、機械カットで壊れた語尾を作るより自然）
- *   2. targetChars以内にある最後の句点で切る
- *   3. 句点が全く無ければ、元文全体をそのまま返す
- *      （不完全な語尾に「。」を貼らない。CSS側で自然にクリップされる）
- * 注: 読点(、)での切断＋「。」付与や、文字数ハードカットは廃止した。
- *     日本語は読点の前が「〜し」「〜で」など連用形/助詞で終わることが多く、
- *     そこに「。」を付けると「サポートし。」のような不自然な文になるため。
+ * 要約結果を必ず targetChars 以内に収める（はみ出し禁止）。
+ * 文法を壊さないため、切るのは必ず句点(。！？)の位置のみ。
+ * 通常は Claude 側で target 以内に収まるよう依頼＋再依頼するので、
+ * この関数が実際に切るのは保険的な稀ケース。
+ * 注: 読点(、)での切断＋「。」付与や文字数ハードカットは使わない
+ *     （「サポートし。」のような壊れた語尾を作るため）。
  */
 function trimToFit(text: string, targetChars: number): string {
   // AIが指示に反して末尾に「…」等を付けてきた場合に備えて除去
   const cleaned = text.replace(/[…]+$/, '').replace(/\.{2,}$/, '').trim();
   if (cleaned.length <= targetChars) return cleaned;
 
-  // 1. わずかな超過は許容: 末尾が句点で終わる完結文ならそのまま使う
-  const graceLimit = Math.ceil(targetChars * 1.08);
-  if (cleaned.length <= graceLimit && /[。！？]$/.test(cleaned)) {
-    return cleaned;
-  }
-
-  // 2. targetChars以内で最後の句点を探して切る（位置は問わない）
+  // targetChars以内で最後の句点を探して切る（必ずtarget以内に収める＝はみ出さない）
   const within = cleaned.substring(0, targetChars);
   const endWithin = Math.max(
     within.lastIndexOf('。'),
@@ -104,8 +94,10 @@ function trimToFit(text: string, targetChars: number): string {
     return cleaned.substring(0, endWithin + 1);
   }
 
-  // 3. 目標長以内に句点が全く無い（最初の一文が長すぎる）。
-  //    最初の完結文で止める（はみ出しを最小化しつつ文法は保つ）。
+  // target以内に句点が無い（＝最初の一文が長すぎる）稀なケース。
+  // Claudeへの再依頼で通常は避けられる。ここに来た場合は、文法を壊さないよう
+  // 最初の完結文を返す（多少はみ出す可能性はあるが、途中で切って「〜し。」等の
+  // 壊れた語尾を作るよりは良い）。
   const firstEnd = Math.min(
     ...['。', '！', '？']
       .map((p) => cleaned.indexOf(p))
@@ -115,7 +107,7 @@ function trimToFit(text: string, targetChars: number): string {
     return cleaned.substring(0, firstEnd + 1);
   }
 
-  // 4. 句点が一つも無い場合は、不完全な語尾を作らずそのまま返す
+  // 句点が一つも無い場合は、不完全な語尾を作らずそのまま返す
   return cleaned;
 }
 
@@ -208,13 +200,38 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
     let attempts = 1;
     const firstPassLen = result.text.length;
 
-    // 目安の75%未満で かつ元文に余地がある場合のみ、1回だけ再依頼して膨らませる。
-    // 積極的な詰め込みはしない（文章が不自然になるため）が、枠が半分以上空くのは
-    // もったいないので「自然さを保ったまま元文の魅力を足す」程度の底上げを行う。
     const tooShort = Math.floor(targetChars * 0.75);
     const hasHeadroom = cleanText.length > targetChars * 1.1;
 
-    if (result.text && result.text.length < tooShort && hasHeadroom) {
+    if (result.text && result.text.length > requestMaxChars) {
+      // 【超過】targetを超えた → 機械的に文を捨てるとスカスカになるので、
+      // Claude自身に「target以内に完結した文章で収め直す」よう再依頼する。
+      console.log('[Claude] Retry (too long):', {
+        outputLen: result.text.length,
+        max: requestMaxChars,
+      });
+      const retryPrompt = `次の商品説明をもとに、店頭POPの紹介文を書いてください。
+
+前回の紹介文は${result.text.length}文字で、上限の${requestMaxChars}文字を超えてしまいました:
+「${result.text}」
+
+内容は良いですが長すぎます。同じ魅力を保ったまま、${requestMinChars}〜${requestMaxChars}文字（${requestMaxChars}文字以内）に収まるよう凝縮して書き直してください。複数の要素は1文にまとめてもかまいません。文を途中で切らず、必ず完結した自然な文章にすること。
+
+商品説明：
+${cleanText}`;
+      const retryResult = await callClaude(client, retryPrompt);
+      attempts += 1;
+      // target以内に収まった結果なら採用（超過が減っていれば短い方を優先）
+      if (retryResult.text) {
+        const before = result.text.length;
+        const after = retryResult.text.length;
+        // 上限以内に収まった、または少なくとも超過が改善したものを採用
+        if (after <= requestMaxChars || after < before) {
+          result = retryResult;
+        }
+      }
+    } else if (result.text && result.text.length < tooShort && hasHeadroom) {
+      // 【過少】枠の75%未満 → 自然さを保ったまま元文の魅力を足して底上げする。
       console.log('[Claude] Retry (too short):', {
         outputLen: result.text.length,
         threshold: tooShort,
@@ -224,18 +241,17 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
 前回の紹介文は${result.text.length}文字と少し短めでした:
 「${result.text}」
 
-元の説明にはまだ伝えられる魅力（特徴・産地・効能・使い方など）が残っています。それを自然に加えて、${requestMinChars}〜${requestMaxChars}文字程度に膨らませてください。ただし、文字数のために不自然な言い回しや途中で切れた文にしては絶対にいけません。あくまで自然で完結した紹介文にすること。
+元の説明にはまだ伝えられる魅力（特徴・産地・効能・使い方など）が残っています。それを自然に加えて、${requestMinChars}〜${requestMaxChars}文字（${requestMaxChars}文字以内）にしてください。ただし、文字数のために不自然な言い回しや途中で切れた文にしては絶対にいけません。あくまで自然で完結した紹介文にすること。
 
 商品説明：
 ${cleanText}`;
-
       const retryResult = await callClaude(client, retryPrompt);
       attempts += 1;
-      // 前回より長く、かつ上限を大きく超えていなければ採用
+      // 前回より長く、かつ target以内なら採用（はみ出しは避ける）
       if (
         retryResult.text &&
         retryResult.text.length > result.text.length &&
-        retryResult.text.length <= Math.ceil(requestMaxChars * 1.15)
+        retryResult.text.length <= requestMaxChars
       ) {
         result = retryResult;
       }
@@ -267,7 +283,7 @@ ${cleanText}`;
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
-      codeVersion: 'v8-fit-sentences',
+      codeVersion: 'v10-fit-in-box',
       debug: {
         firstPassLen,
         finalLen: finalText.length,
