@@ -298,7 +298,6 @@ ${cleanText}`;
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
-      codeVersion: 'v13-sonnet',
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
