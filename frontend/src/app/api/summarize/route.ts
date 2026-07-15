@@ -204,10 +204,10 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
     let result = await callClaude(client, firstPrompt);
     let attempts = 1;
 
-    // 極端に短い（目安の60%未満）かつ元文に余地がある場合のみ、1回だけ再依頼。
-    // 文字数を埋めるための積極的なリトライはしない（詰め込みで文章が不自然に
-    // なるため）。あくまで「明らかにスカスカ」を救済する程度に留める。
-    const tooShort = Math.floor(targetChars * 0.6);
+    // 目安の75%未満で かつ元文に余地がある場合のみ、1回だけ再依頼して膨らませる。
+    // 積極的な詰め込みはしない（文章が不自然になるため）が、枠が半分以上空くのは
+    // もったいないので「自然さを保ったまま元文の魅力を足す」程度の底上げを行う。
+    const tooShort = Math.floor(targetChars * 0.75);
     const hasHeadroom = cleanText.length > targetChars * 1.1;
 
     if (result.text && result.text.length < tooShort && hasHeadroom) {
