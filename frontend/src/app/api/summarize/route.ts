@@ -120,8 +120,9 @@ function trimToFit(text: string, targetChars: number): string {
 function buildUserPrompt(cleanText: string, minChars: number, maxChars: number): string {
   return `次の商品説明をもとに、店頭POPに印刷する紹介文を書いてください。
 
-・${maxChars}文字を絶対に超えないこと。その範囲でできるだけ${minChars}文字以上になるよう、完結した文を必要なだけ続けて枠を埋める
-・次の一文を足すと${maxChars}文字を超えるなら、その文は入れず前の文で止める。文を途中で切るのは禁止
+・${maxChars}文字を絶対に超えないこと。その範囲で、できるだけ${minChars}文字以上になるよう枠を埋める
+・元文に十分な内容がある場合、1文だけで終えて枠を余らせない。各文を短めにして2〜3文に分け、${maxChars}文字以内でできるだけ多くの魅力（特徴・産地・効能・使い方など）を盛り込む
+・ただし次の一文を足すと${maxChars}文字を超えるなら、その文は入れず前の文で止める。文を途中で切るのは禁止
 ・一文ずつ必ず言い切り、紹介文として自然に読める文章にする（不自然な詰め込み・冗長な繰り返しはしない）
 ・元の説明にない事実は足さない
 
@@ -196,65 +197,62 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
       orig: cleanText.length,
     });
 
-    let result = await callClaude(client, firstPrompt);
+    const first = await callClaude(client, firstPrompt);
+    let result = first;
     let attempts = 1;
 
     const tooShort = Math.floor(targetChars * 0.75);
     const hasHeadroom = cleanText.length > targetChars * 1.1;
+    // 候補を「target以内に収めたときの長さ」で評価する。長いほど良い（＝枠が埋まる）。
+    const fittedLen = (t: string) =>
+      t.length <= requestMaxChars ? t.length : trimToFit(t, requestMaxChars).length;
 
-    if (result.text && result.text.length > requestMaxChars) {
-      // 【超過】targetを超えた → 機械的に文を捨てるとスカスカになるので、
-      // Claude自身に「target以内に完結した文章で収め直す」よう再依頼する。
-      console.log('[Claude] Retry (too long):', {
-        outputLen: result.text.length,
-        max: requestMaxChars,
-      });
+    let bestText = first.text;
+
+    if (bestText && bestText.length > requestMaxChars) {
+      // 【超過】targetを超えた → Claude自身に target以内で凝縮させる。
+      console.log('[Claude] Retry (too long):', { outputLen: bestText.length, max: requestMaxChars });
       const retryPrompt = `次の商品説明をもとに、店頭POPの紹介文を書いてください。
 
-前回の紹介文は${result.text.length}文字で、上限の${requestMaxChars}文字を超えてしまいました:
-「${result.text}」
+前回の紹介文は${bestText.length}文字で、上限の${requestMaxChars}文字を超えてしまいました:
+「${bestText}」
 
 内容は良いですが長すぎます。同じ魅力を保ったまま、${requestMinChars}〜${requestMaxChars}文字（${requestMaxChars}文字以内）に収まるよう凝縮して書き直してください。複数の要素は1文にまとめてもかまいません。文を途中で切らず、必ず完結した自然な文章にすること。
 
 商品説明：
 ${cleanText}`;
-      const retryResult = await callClaude(client, retryPrompt);
+      const retry = await callClaude(client, retryPrompt);
       attempts += 1;
-      // target以内に収まった結果なら採用（超過が減っていれば短い方を優先）
-      if (retryResult.text) {
-        const before = result.text.length;
-        const after = retryResult.text.length;
-        // 上限以内に収まった、または少なくとも超過が改善したものを採用
-        if (after <= requestMaxChars || after < before) {
-          result = retryResult;
-        }
+      // target以内に収まり、かつ充填が良くなる（または初回が超過のまま）なら採用
+      if (retry.text && (retry.text.length <= requestMaxChars || fittedLen(retry.text) > fittedLen(bestText))) {
+        bestText = retry.text;
       }
-    } else if (result.text && result.text.length < tooShort && hasHeadroom) {
-      // 【過少】枠の75%未満 → 自然さを保ったまま元文の魅力を足して底上げする。
-      console.log('[Claude] Retry (too short):', {
-        outputLen: result.text.length,
-        threshold: tooShort,
-      });
-      const retryPrompt = `次の商品説明をもとに、店頭POPの紹介文を書いてください。
+    } else if (bestText && bestText.length < tooShort && hasHeadroom) {
+      // 【過少】枠の75%未満 → 元文に中身があるのに短すぎる。
+      // 「短い文を2〜3文に分けて枠を埋める」よう促し、最大2回まで試して
+      // 一番よく埋まる（target以内で最長の）候補を採用する。
+      for (let i = 0; i < 2 && fittedLen(bestText) < tooShort; i++) {
+        console.log('[Claude] Retry (too short):', { attempt: attempts, outputLen: bestText.length, threshold: tooShort });
+        const retryPrompt = `次の商品説明をもとに、店頭POPの紹介文を書いてください。
 
-前回の紹介文は${result.text.length}文字と少し短めでした:
-「${result.text}」
+前回の紹介文は${bestText.length}文字で、枠（${requestMaxChars}文字）に対して短すぎます:
+「${bestText}」
 
-元の説明にはまだ伝えられる魅力（特徴・産地・効能・使い方など）が残っています。それを自然に加えて、${requestMinChars}〜${requestMaxChars}文字（${requestMaxChars}文字以内）にしてください。ただし、文字数のために不自然な言い回しや途中で切れた文にしては絶対にいけません。あくまで自然で完結した紹介文にすること。
+元文にはまだ盛り込める魅力（特徴・産地・効能・使い方など）が残っています。コツ：1つの長い文で終わらせず、短めの文を2〜3個に分けて、合計${requestMinChars}〜${requestMaxChars}文字（${requestMaxChars}文字以内）でできるだけ枠を埋めてください。各文は必ず言い切り、途中で切らないこと。不自然な繰り返しや水増しはしないこと。
 
 商品説明：
 ${cleanText}`;
-      const retryResult = await callClaude(client, retryPrompt);
-      attempts += 1;
-      // 前回より長く、かつ target以内なら採用（はみ出しは避ける）
-      if (
-        retryResult.text &&
-        retryResult.text.length > result.text.length &&
-        retryResult.text.length <= requestMaxChars
-      ) {
-        result = retryResult;
+        const retry = await callClaude(client, retryPrompt);
+        attempts += 1;
+        if (retry.text && fittedLen(retry.text) > fittedLen(bestText)) {
+          bestText = retry.text;
+        } else {
+          break; // 改善しなければ打ち切り
+        }
       }
     }
+
+    result = { ...first, text: bestText };
 
     if (!result.text) {
       console.warn('[Claude] Empty response, falling back to simple summarize');
@@ -282,6 +280,7 @@ ${cleanText}`;
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
+      codeVersion: 'v11-fill-small-box',
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
