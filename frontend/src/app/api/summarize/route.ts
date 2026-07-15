@@ -175,6 +175,20 @@ async function callClaude(client: Anthropic, userPrompt: string): Promise<Claude
 
 async function summarizeWithClaude(text: string, targetChars: number, client: Anthropic) {
   const cleanText = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // 元文がそのまま収まる（またはgrace内）なら要約しない。
+  // 圧縮すると情報が減るだけなので、元文をそのまま返す（API呼び出しも節約）。
+  if (cleanText.length <= Math.ceil(targetChars * 1.08)) {
+    console.log('[Claude] Skip: source already fits', { orig: cleanText.length, targetChars });
+    return NextResponse.json({
+      summarized: cleanText,
+      method: 'passthrough',
+      originalLength: text.length,
+      summarizedLength: cleanText.length,
+      attempts: 0,
+    });
+  }
+
   // 目安レンジ。下限は自然さを優先して緩め（詰め込みで文章が壊れるのを防ぐ）
   const requestMinChars = Math.max(20, Math.floor(targetChars * 0.75));
   const requestMaxChars = targetChars;
