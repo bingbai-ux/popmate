@@ -67,40 +67,52 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * AI要約結果をtargetChars以内に自然な文末で切り詰める。
- * 「…」は絶対に付けない。優先順位:
- *   1. targetChars以内かつ target の 70% 以降の位置にある最後の句点(。！？) を使う
- *      （目標長にできるだけ近い位置で自然に終わらせるため、序盤の句点は無視）
- *   2. targetChars以内かつ target の 50% 以降の読点(、) で切って「。」を付ける
- *   3. 最終手段: ハードカット後に「。」を付ける
+ * AI要約結果をtargetChars付近で「文法的に自然な文末」に丸める。
+ * 「です」を「で」で切るような不完全な語尾を絶対に作らない。優先順位:
+ *   1. わずかな超過(〜108%)で末尾が句点(。！？)なら、そのまま採用
+ *      （数文字はみ出しても、機械カットで壊れた語尾を作るより自然）
+ *   2. targetChars以内にある最後の句点で切る
+ *   3. 句点が全く無ければ、元文全体をそのまま返す
+ *      （不完全な語尾に「。」を貼らない。CSS側で自然にクリップされる）
+ * 注: 読点(、)での切断＋「。」付与や、文字数ハードカットは廃止した。
+ *     日本語は読点の前が「〜し」「〜で」など連用形/助詞で終わることが多く、
+ *     そこに「。」を付けると「サポートし。」のような不自然な文になるため。
  */
 function trimToFit(text: string, targetChars: number): string {
   // AIが指示に反して末尾に「…」等を付けてきた場合に備えて除去
   const cleaned = text.replace(/[…]+$/, '').replace(/\.{2,}$/, '').trim();
   if (cleaned.length <= targetChars) return cleaned;
 
-  const truncated = cleaned.substring(0, targetChars);
+  // 1. わずかな超過は許容: 末尾が句点で終わる完結文ならそのまま使う
+  const graceLimit = Math.ceil(targetChars * 1.08);
+  if (cleaned.length <= graceLimit && /[。！？]$/.test(cleaned)) {
+    return cleaned;
+  }
 
-  // 1. 目標長の70%以降にある句点なら使う（早すぎる句点は捨てる）
-  const sentenceFloor = Math.floor(targetChars * 0.7);
-  const lastSentenceEnd = Math.max(
-    truncated.lastIndexOf('。'),
-    truncated.lastIndexOf('！'),
-    truncated.lastIndexOf('？')
+  // 2. targetChars以内で最後の句点を探して切る（位置は問わない）
+  const within = cleaned.substring(0, targetChars);
+  const endWithin = Math.max(
+    within.lastIndexOf('。'),
+    within.lastIndexOf('！'),
+    within.lastIndexOf('？')
   );
-  if (lastSentenceEnd >= sentenceFloor) {
-    return cleaned.substring(0, lastSentenceEnd + 1);
+  if (endWithin >= 0) {
+    return cleaned.substring(0, endWithin + 1);
   }
 
-  // 2. 目標長の50%以降にある読点で切って句点を付ける
-  const commaFloor = Math.floor(targetChars * 0.5);
-  const lastComma = truncated.lastIndexOf('、');
-  if (lastComma >= commaFloor) {
-    return cleaned.substring(0, lastComma) + '。';
+  // 3. 目標長以内に句点が全く無い（最初の一文が長すぎる）。
+  //    最初の完結文で止める（はみ出しを最小化しつつ文法は保つ）。
+  const firstEnd = Math.min(
+    ...['。', '！', '？']
+      .map((p) => cleaned.indexOf(p))
+      .filter((i) => i >= 0)
+  );
+  if (Number.isFinite(firstEnd)) {
+    return cleaned.substring(0, firstEnd + 1);
   }
 
-  // 3. 最終手段: ハードカット + 「。」（「…」は付けない）
-  return cleaned.substring(0, targetChars - 1) + '。';
+  // 4. 句点が一つも無い場合は、不完全な語尾を作らずそのまま返す
+  return cleaned;
 }
 
 /**
