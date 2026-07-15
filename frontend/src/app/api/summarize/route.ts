@@ -4,11 +4,11 @@ import Anthropic from '@anthropic-ai/sdk';
 /**
  * AI文章省略API
  * 長い商品説明文を指定文字数以内に要約する
- * Claude Haiku 4.5 を使用、APIキー未設定時は簡易省略にフォールバック
+ * Claude Sonnet 4.6 を使用、APIキー未設定時は簡易省略にフォールバック
  */
 
 // プロンプトキャッシュ対象のシステムプロンプト（リクエスト間で固定）
-// 注: Haiku 4.5 の最小キャッシュ対象プレフィックスは 4096 トークン。
+// 注: Sonnet 4.6 の最小キャッシュ対象プレフィックスは 2048 トークン。
 // 現状この system は短いため実際にはキャッシュ発火しないが、
 // 将来プロンプトが伸びたとき自動的にキャッシュが効くようマーカーは付けておく。
 const SYSTEM_PROMPT = `あなたは小売店の商品POPを書くプロのコピーライターです。元の商品説明をもとに、そのまま店頭に印刷して出せる、自然で完結した紹介文を書いてください。
@@ -112,7 +112,7 @@ function trimToFit(text: string, targetChars: number): string {
 }
 
 /**
- * Claude Haiku 4.5 で要約
+ * Claude Sonnet 4.6 で要約
  * 戦略: 「店頭に出せる自然で完結した紹介文」を最優先し、文字数は目安として扱う。
  * 文字数を埋めるための詰め込みはしない（不自然な体言止めや係り受け破綻の原因になる）。
  * trimToFit は上限を大きく超えた時だけ、文の区切りで丸める保険。
@@ -140,10 +140,15 @@ type ClaudeCallResult = {
   };
 };
 
+const SUMMARIZE_MODEL = 'claude-sonnet-4-6';
+
 async function callClaude(client: Anthropic, userPrompt: string): Promise<ClaudeCallResult> {
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5',
+    model: SUMMARIZE_MODEL,
     max_tokens: 1024,
+    // 要約は軽いタスクなので思考オフ＋低effortで高速・低コストに保つ
+    thinking: { type: 'disabled' },
+    output_config: { effort: 'low' },
     system: [
       {
         type: 'text',
@@ -289,11 +294,11 @@ ${cleanText}`;
 
     return NextResponse.json({
       summarized: finalText,
-      method: 'claude-haiku-4-5',
+      method: SUMMARIZE_MODEL,
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
-      codeVersion: 'v12-no-overflow',
+      codeVersion: 'v13-sonnet',
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
