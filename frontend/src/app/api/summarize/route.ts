@@ -203,52 +203,65 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
 
     const tooShort = Math.floor(targetChars * 0.75);
     const hasHeadroom = cleanText.length > targetChars * 1.1;
-    // 候補を「target以内に収めたときの長さ」で評価する。長いほど良い（＝枠が埋まる）。
-    const fittedLen = (t: string) =>
-      t.length <= requestMaxChars ? t.length : trimToFit(t, requestMaxChars).length;
+    // 候補を「target以内に収めたときの長さ」で評価する。
+    // target以内に収まらない（＝句点が無く切れない超過文）候補は -1 として絶対不採用にする。
+    // これにより最終出力が枠をはみ出すことを原理的に防ぐ。
+    const fittedLen = (t: string): number => {
+      if (!t) return -1;
+      if (t.length <= requestMaxChars) return t.length;
+      const trimmed = trimToFit(t, requestMaxChars);
+      return trimmed.length <= requestMaxChars ? trimmed.length : -1;
+    };
 
     let bestText = first.text;
 
     if (bestText && bestText.length > requestMaxChars) {
-      // 【超過】targetを超えた → Claude自身に target以内で凝縮させる。
-      console.log('[Claude] Retry (too long):', { outputLen: bestText.length, max: requestMaxChars });
-      const retryPrompt = `次の商品説明をもとに、店頭POPの紹介文を書いてください。
+      // 【超過】targetを超えた → Claude自身に target以内で凝縮させる。最大2回試行。
+      for (let i = 0; i < 2 && fittedLen(bestText) < tooShort; i++) {
+        console.log('[Claude] Retry (too long):', { attempt: attempts, outputLen: bestText.length, max: requestMaxChars });
+        const retryPrompt = `次の商品説明をもとに、店頭POPの紹介文を書いてください。
 
 前回の紹介文は${bestText.length}文字で、上限の${requestMaxChars}文字を超えてしまいました:
 「${bestText}」
 
-内容は良いですが長すぎます。同じ魅力を保ったまま、${requestMinChars}〜${requestMaxChars}文字（${requestMaxChars}文字以内）に収まるよう凝縮して書き直してください。複数の要素は1文にまとめてもかまいません。文を途中で切らず、必ず完結した自然な文章にすること。
+内容は良いですが長すぎます。同じ魅力を保ったまま、${requestMinChars}〜${requestMaxChars}文字（必ず${requestMaxChars}文字以内）に収めてください。コツ：1つの長い文にせず、短めの文を2〜3個に分けると収まりやすいです。文を途中で切らず、必ず完結した自然な文章にすること。
 
 商品説明：
 ${cleanText}`;
-      const retry = await callClaude(client, retryPrompt);
-      attempts += 1;
-      // target以内に収まり、かつ充填が良くなる（または初回が超過のまま）なら採用
-      if (retry.text && (retry.text.length <= requestMaxChars || fittedLen(retry.text) > fittedLen(bestText))) {
-        bestText = retry.text;
+        const retry = await callClaude(client, retryPrompt);
+        attempts += 1;
+        // target以内に収められる候補で、より充填が良いものだけ採用（超過文は不採用）
+        if (retry.text && fittedLen(retry.text) > fittedLen(bestText)) {
+          bestText = retry.text;
+        } else if (fittedLen(bestText) < 0 && retry.text && fittedLen(retry.text) >= 0) {
+          // 現候補がそもそも枠に収まらない場合は、収まる候補を優先採用
+          bestText = retry.text;
+        } else {
+          break;
+        }
       }
     } else if (bestText && bestText.length < tooShort && hasHeadroom) {
       // 【過少】枠の75%未満 → 元文に中身があるのに短すぎる。
-      // 「短い文を2〜3文に分けて枠を埋める」よう促し、最大2回まで試して
+      // 「短い文を2〜3文に分けて枠を埋める」よう促し、最大3回試して
       // 一番よく埋まる（target以内で最長の）候補を採用する。
-      for (let i = 0; i < 2 && fittedLen(bestText) < tooShort; i++) {
+      for (let i = 0; i < 3 && fittedLen(bestText) < tooShort; i++) {
         console.log('[Claude] Retry (too short):', { attempt: attempts, outputLen: bestText.length, threshold: tooShort });
         const retryPrompt = `次の商品説明をもとに、店頭POPの紹介文を書いてください。
 
 前回の紹介文は${bestText.length}文字で、枠（${requestMaxChars}文字）に対して短すぎます:
 「${bestText}」
 
-元文にはまだ盛り込める魅力（特徴・産地・効能・使い方など）が残っています。コツ：1つの長い文で終わらせず、短めの文を2〜3個に分けて、合計${requestMinChars}〜${requestMaxChars}文字（${requestMaxChars}文字以内）でできるだけ枠を埋めてください。各文は必ず言い切り、途中で切らないこと。不自然な繰り返しや水増しはしないこと。
+元文にはまだ盛り込める魅力（特徴・産地・効能・使い方など）が残っています。必ず短めの文を2文以上に分けて、合計${requestMinChars}〜${requestMaxChars}文字（必ず${requestMaxChars}文字以内）でできるだけ枠を埋めてください。1文だけで終わらせないこと。各文は必ず言い切り、途中で切らないこと。不自然な繰り返しや水増しはしないこと。
 
 商品説明：
 ${cleanText}`;
         const retry = await callClaude(client, retryPrompt);
         attempts += 1;
+        // target以内に収められて、より充填が良い候補のみ採用（超過文は不採用）
         if (retry.text && fittedLen(retry.text) > fittedLen(bestText)) {
           bestText = retry.text;
-        } else {
-          break; // 改善しなければ打ち切り
         }
+        // 改善しなくても、収まる充実版を引くまで規定回数は試す（break しない）
       }
     }
 
@@ -280,7 +293,7 @@ ${cleanText}`;
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
-      codeVersion: 'v11-fill-small-box',
+      codeVersion: 'v12-no-overflow',
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
