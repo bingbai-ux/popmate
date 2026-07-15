@@ -203,6 +203,7 @@ async function summarizeWithClaude(text: string, targetChars: number, client: An
 
     let result = await callClaude(client, firstPrompt);
     let attempts = 1;
+    const firstPassLen = result.text.length;
 
     // 目安の75%未満で かつ元文に余地がある場合のみ、1回だけ再依頼して膨らませる。
     // 積極的な詰め込みはしない（文章が不自然になるため）が、枠が半分以上空くのは
@@ -263,6 +264,13 @@ ${cleanText}`;
       originalLength: text.length,
       summarizedLength: finalText.length,
       attempts,
+      codeVersion: 'v7-retry75',
+      debug: {
+        firstPassLen,
+        tooShort,
+        hasHeadroom,
+        cleanLen: cleanText.length,
+      },
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
