@@ -53,7 +53,8 @@ function PrintContent() {
   // 印刷設定
   const [paperSize, setPaperSize] = useState<string>('a4');
   const [offsetX, setOffsetX] = useState(0);  // 位置調整 X (mm)
-  const [offsetY, setOffsetY] = useState(0);  // 位置調整 Y (mm)
+  // 位置調整 Y (mm)。null = 未操作（下端の印刷不可領域を避けるデフォルト値を使う）
+  const [offsetYInput, setOffsetYInput] = useState<number | null>(null);
   const [showBorders, setShowBorders] = useState(false); // 枠あり印刷
 
   // 保存機能
@@ -229,6 +230,12 @@ function PrintContent() {
       gapY: 0,
     });
   }, [templateSize, paper, products.length]);
+
+  // 多くのプリンターは用紙下端の数mm〜十数mmを印刷できず、最下段の価格が欠けるため
+  // デフォルトで全体を上へ最大5mm寄せる（上余白は最低3mm残す）
+  const defaultOffsetY = -Math.min(5, Math.max(0, layout.marginY - 3));
+  const offsetY = offsetYInput ?? defaultOffsetY;
+  const setOffsetY = (v: number) => setOffsetYInput(v);
 
   // --- ページナビゲーション ---
   const handlePrevPage = () => setDisplayPage(p => Math.max(0, p - 1));
