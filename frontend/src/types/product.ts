@@ -14,6 +14,7 @@ export interface Product {
   taxDivision: '0' | '1' | '2';  // 税区分 (0:税込, 1:税抜, 2:非課税)
   taxRate: number;         // 計算済み税率 (8 or 10)
   productImageUrl?: string;  // 商品画像（data URL）- 商品ごとに設定可能
+  isBlank?: boolean;         // 編集画面で追加した空欄POP（価格未入力なら価格欄を空で印刷）
 }
 
 export interface Category {

@@ -69,12 +69,15 @@ export function replacePlaceholders(
     );
   }
 
+  // 空欄POPで価格未入力の場合は価格系を空にする（¥0 と印刷しない）
+  const blankPrice = !!product.isBlank && !product.price;
+
   const replacements: Record<string, string> = {
     '{{productName}}': product.productName || '',
-    '{{price}}': formatPrice(product.price),
-    '{{priceNumber}}': formatPriceNumber(product.price),
-    '{{taxIncludedPrice}}': formatPrice(taxIncludedPrice),
-    '{{taxIncludedPriceNumber}}': formatPriceNumber(taxIncludedPrice),
+    '{{price}}': blankPrice ? '' : formatPrice(product.price),
+    '{{priceNumber}}': blankPrice ? '' : formatPriceNumber(product.price),
+    '{{taxIncludedPrice}}': blankPrice ? '' : formatPrice(taxIncludedPrice),
+    '{{taxIncludedPriceNumber}}': blankPrice ? '' : formatPriceNumber(taxIncludedPrice),
     '{{description}}': (product.description || '').replace(/\r?\n/g, '').replace(/\s+/g, ''),
     '{{maker}}': product.maker || product.groupCode || product.tag || '',
     '{{taxRate}}': `${productTaxRate}%`,
