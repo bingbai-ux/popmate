@@ -125,8 +125,8 @@ export default function EditorCanvas({
             className="absolute inset-0 pointer-events-none"
             style={{
               backgroundImage: `
-                linear-gradient(to right, #e5e7eb 1px, transparent 1px),
-                linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
+                linear-gradient(to right, #E2E1DA 1px, transparent 1px),
+                linear-gradient(to bottom, #E2E1DA 1px, transparent 1px)
               `,
               backgroundSize: `${mmToPx(5)}px ${mmToPx(5)}px`,
               opacity: 0.5,

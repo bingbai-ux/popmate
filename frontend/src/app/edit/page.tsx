@@ -289,7 +289,7 @@ function EditContent() {
               router.push(`/print?template=${templateId}`);
             }}
             disabled={products.length === 0 || isPreparing}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
+            className="px-6 py-2.5 bg-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
           >
             {isPreparing ? (
               <>
@@ -321,7 +321,7 @@ function EditContent() {
             <p className="text-gray-500 mb-4">商品が選択されていません</p>
             <Link
               href={`/data-select?template=${templateId}`}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 text-sm"
             >
               商品を選択する
             </Link>

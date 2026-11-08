@@ -75,7 +75,7 @@ export default function ManualPage() {
         {/* メインコンテンツ */}
         <article className="flex-1 min-w-0">
           {/* タイトル */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl p-8 mb-8">
+          <div className="bg-background-dark text-white rounded-xl p-8 mb-8">
             <h1 className="text-2xl font-bold mb-2">ポップメイト 取り扱い説明書</h1>
             <p className="text-blue-100">スマレジから商品情報を取得し、プライスポップを簡単に作成できるツールです。</p>
           </div>
@@ -92,7 +92,7 @@ export default function ManualPage() {
               ].map((item, i) => (
                 <div key={item.step} className="flex items-center gap-2">
                   <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-                    <span className="w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
+                    <span className="w-7 h-7 bg-primary text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
                       {item.step}
                     </span>
                     <span className="text-sm font-medium text-blue-800 whitespace-nowrap">{item.label}</span>
@@ -522,7 +522,7 @@ function Section({ id, title, step, children }: { id: string; title: string; ste
     <section id={id} className="mb-10 scroll-mt-8">
       <div className="flex items-center gap-3 mb-4">
         {step && (
-          <span className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
+          <span className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
             {step}
           </span>
         )}

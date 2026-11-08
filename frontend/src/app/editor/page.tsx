@@ -593,7 +593,7 @@ function EditorContent() {
           </div>
           <button
             onClick={handleNext}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
+            className="px-6 py-2.5 bg-primary text-white rounded-lg hover:opacity-90 font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
           >
             次へ：商品データ選択
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
