@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'ポップメイト - プライスポップ作成サービス',
+  title: 'POPMATE | F&C',
   description: 'スマレジの商品データを使って、プロ品質のプライスポップを簡単作成',
   icons: {
     apple: '/icons/apple-icon-180.png',
