@@ -5,8 +5,6 @@ export const metadata: Metadata = {
   title: 'ポップメイト - プライスポップ作成サービス',
   description: 'スマレジの商品データを使って、プロ品質のプライスポップを簡単作成',
   icons: {
-    icon: '/popmate_icon_blue.png',
-    shortcut: '/popmate_icon_blue.png',
     apple: '/icons/apple-icon-180.png',
   },
   appleWebApp: {
@@ -27,7 +25,6 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <head>
-        <link rel="icon" href="/popmate_icon_blue.png" type="image/png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href={googleFontsUrl} rel="stylesheet" />

@@ -9,11 +9,17 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center">
         {/* ブランドピル（ポータルと同じ様式） */}
         <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-          <span
-            className="font-bold text-sm px-4 py-1.5 rounded-full tracking-wider"
-            style={{ background: '#E9F056', color: '#351E28', letterSpacing: '0.04em' }}
-          >
-            POPMATE
+          <span className="flex items-center gap-2.5">
+            <span
+              aria-hidden
+              className="grid h-7 w-7 place-items-center rounded-lg text-[15px] font-extrabold"
+              style={{ background: '#D7EFFF', color: '#351E28' }}
+            >
+              P
+            </span>
+            <span className="text-[16px] font-extrabold tracking-wide" style={{ color: '#351E28' }}>
+              POPMATE
+            </span>
           </span>
           <span className="text-xs text-text-muted leading-tight hidden sm:inline">
             プライスポップ作成
