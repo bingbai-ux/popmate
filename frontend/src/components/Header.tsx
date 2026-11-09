@@ -21,9 +21,6 @@ export default function Header() {
               POPMATE
             </span>
           </span>
-          <span className="text-xs text-text-muted leading-tight hidden sm:inline">
-            プライスポップ作成
-          </span>
         </Link>
 
         {/* 使い方リンク */}
