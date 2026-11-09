@@ -7,7 +7,12 @@ export const metadata: Metadata = {
   icons: {
     icon: '/popmate_icon_blue.png',
     shortcut: '/popmate_icon_blue.png',
-    apple: '/popmate_icon_blue.png',
+    apple: '/icons/apple-icon-180.png',
+  },
+  appleWebApp: {
+    capable: true,
+    title: 'POPMATE',
+    statusBarStyle: 'default',
   },
 };
 
