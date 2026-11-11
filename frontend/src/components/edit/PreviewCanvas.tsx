@@ -202,12 +202,12 @@ export default function PreviewCanvas({
                 position: 'absolute', left, top, width, height,
                 zIndex: element.zIndex,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                border: '2px dashed #86efac',
-                backgroundColor: '#f0fdf4',
+                border: '2px dashed #AEB8A0',
+                backgroundColor: '#FBFAF6',
                 borderRadius: 4,
               }}
             >
-              <div style={{ textAlign: 'center', color: '#16a34a', fontSize: Math.max(8, Math.min(12, width / 8)) }}>
+              <div style={{ textAlign: 'center', color: '#4C5544', fontSize: Math.max(8, Math.min(12, width / 8)) }}>
                 <svg style={{ width: Math.min(24, width / 4), height: Math.min(24, height / 4), margin: '0 auto' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
@@ -257,7 +257,7 @@ export default function PreviewCanvas({
             <div
               className="absolute inset-0 pointer-events-none opacity-10"
               style={{
-                backgroundImage: `linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)`,
+                backgroundImage: `linear-gradient(to right, #E2E1DA 1px, transparent 1px), linear-gradient(to bottom, #E2E1DA 1px, transparent 1px)`,
                 backgroundSize: `${mmToPx(5)}px ${mmToPx(5)}px`,
               }}
             />

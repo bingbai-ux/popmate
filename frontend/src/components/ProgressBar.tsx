@@ -15,7 +15,7 @@ const steps = [
   { number: 5, label: '印刷', path: '/print' },
 ];
 
-const PRIMARY_COLOR = '#2563EB';
+const PRIMARY_COLOR = '#351E28';
 
 function ProgressBarContent({ currentStep }: ProgressBarProps) {
   const router = useRouter();
@@ -36,7 +36,7 @@ function ProgressBarContent({ currentStep }: ProgressBarProps) {
   };
 
   return (
-    <div className="bg-white border-b py-4" style={{ borderColor: '#E5E7EB' }}>
+    <div className="bg-white border-b py-4" style={{ borderColor: '#E2E1DA' }}>
       <div className="max-w-4xl mx-auto px-4">
         <div className="flex items-center justify-between">
           {steps.map((step, index) => {
@@ -58,12 +58,12 @@ function ProgressBarContent({ currentStep }: ProgressBarProps) {
                         ? PRIMARY_COLOR 
                         : isCompleted 
                           ? 'rgba(37, 99, 235, 0.2)' 
-                          : '#F3F4F6',
+                          : '#EFEFEA',
                       color: isCurrent 
                         ? 'white' 
                         : isCompleted 
                           ? PRIMARY_COLOR 
-                          : '#9CA3AF',
+                          : '#84787D',
                       transform: isCurrent ? 'scale(1.1)' : 'scale(1)',
                       boxShadow: isCurrent ? '0 10px 15px -3px rgba(0, 0, 0, 0.1)' : 'none',
                     }}
@@ -87,7 +87,7 @@ function ProgressBarContent({ currentStep }: ProgressBarProps) {
                         ? PRIMARY_COLOR 
                         : isCompleted 
                           ? 'rgba(37, 99, 235, 0.7)' 
-                          : '#9CA3AF',
+                          : '#84787D',
                     }}
                   >
                     {step.label}
@@ -100,7 +100,7 @@ function ProgressBarContent({ currentStep }: ProgressBarProps) {
                     style={{
                       backgroundColor: isCompleted 
                         ? 'rgba(37, 99, 235, 0.4)' 
-                        : '#E5E7EB',
+                        : '#E2E1DA',
                     }}
                   />
                 )}
@@ -117,7 +117,7 @@ function ProgressBarContent({ currentStep }: ProgressBarProps) {
 export default function ProgressBar({ currentStep }: ProgressBarProps) {
   return (
     <Suspense fallback={
-      <div className="bg-white border-b py-4" style={{ borderColor: '#E5E7EB' }}>
+      <div className="bg-white border-b py-4" style={{ borderColor: '#E2E1DA' }}>
         <div className="max-w-4xl mx-auto px-4">
           <div className="flex items-center justify-between">
             {steps.map((step, index) => (
@@ -126,18 +126,18 @@ export default function ProgressBar({ currentStep }: ProgressBarProps) {
                   <div
                     className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm"
                     style={{
-                      backgroundColor: currentStep === step.number ? PRIMARY_COLOR : '#F3F4F6',
-                      color: currentStep === step.number ? 'white' : '#9CA3AF',
+                      backgroundColor: currentStep === step.number ? PRIMARY_COLOR : '#EFEFEA',
+                      color: currentStep === step.number ? 'white' : '#84787D',
                     }}
                   >
                     {step.number}
                   </div>
-                  <span className="mt-2 text-xs font-medium" style={{ color: '#9CA3AF' }}>
+                  <span className="mt-2 text-xs font-medium" style={{ color: '#84787D' }}>
                     {step.label}
                   </span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className="w-12 sm:w-20 h-1 mx-2 rounded-full" style={{ backgroundColor: '#E5E7EB' }} />
+                  <div className="w-12 sm:w-20 h-1 mx-2 rounded-full" style={{ backgroundColor: '#E2E1DA' }} />
                 )}
               </div>
             ))}

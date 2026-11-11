@@ -1,31 +1,149 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=M+PLUS+2:wght@400;500;700;800&family=Manrope:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
+/* ============================================================
+   F&C Design System（HR HUBと同一トークン）
+   基本5色: wasabi #E9F056 / orange #FF5C34 / coolblue #D7EFFF /
+            cassis #351E28 / sauge #AEB8A0
+   原則: 影なし・背景色で区別・派生色以外は作らない
+   ※ ポップ本体の描画（.a4-page / .pop-frame / インラインstyle）は
+     商品ポップのデザインなので対象外（白地のまま）
+   ============================================================ */
 @theme {
-  --color-primary: #2563EB;
-  --color-primary-light: #3B82F6;
-  --color-primary-dark: #1E40AF;
-  
-  --color-background-dark: #0A1628;
+  --color-primary: #351E28;        /* cassis: 主ボタン・アクセント */
+  --color-primary-light: #9C8290;  /* cassis-soft */
+  --color-primary-dark: #351E28;
+
+  --color-background-dark: #351E28;
   --color-background-light: #FFFFFF;
-  --color-background-muted: #EFF6FF;
-  
-  --color-border: #E5E7EB;
-  --color-border-primary: #2563EB;
-  --color-border-dark: #0A1628;
-  
-  --color-text-dark: #0A1628;
+  --color-background-muted: #FBFAF6; /* card-soft */
+
+  --color-border: #E2E1DA;          /* line */
+  --color-border-primary: #351E28;
+  --color-border-dark: #351E28;
+
+  --color-text-dark: #351E28;
   --color-text-light: #FFFFFF;
-  --color-text-muted: #6B7280;
-  
-  --color-disabled: #BDBDBD;
-  
-  --font-family-sans: 'Noto Sans JP', sans-serif;
+  --color-text-muted: #84787D;      /* ink-soft */
+
+  --color-disabled: #AEB8A0;        /* sauge */
+
+  --font-family-sans: "Manrope", "M PLUS 2", system-ui, sans-serif;
+
+  /* --- 生のTailwindパレットをF&C派生色で上書き（既存クラスを一括変換） --- */
+  /* gray → F&Cニュートラル */
+  --color-gray-50: #FBFAF6;
+  --color-gray-100: #EFEFEA;
+  --color-gray-200: #E2E1DA;
+  --color-gray-300: #E2E1DA;
+  --color-gray-400: #9C8290;
+  --color-gray-500: #84787D;
+  --color-gray-600: #84787D;
+  --color-gray-700: #351E28;
+  --color-gray-800: #351E28;
+  --color-gray-900: #351E28;
+
+  /* blue → coolblue / blue-ink（情報・データ） */
+  --color-blue-50: #D7EFFF;
+  --color-blue-100: #D7EFFF;
+  --color-blue-200: #D7EFFF;
+  --color-blue-300: #33566F;
+  --color-blue-400: #33566F;
+  --color-blue-500: #33566F;
+  --color-blue-600: #33566F;
+  --color-blue-700: #33566F;
+  --color-blue-800: #33566F;
+  --color-blue-900: #33566F;
+
+  /* red → orange系（警告・エラー） */
+  --color-red-50: #FFD8C2;
+  --color-red-100: #FFD8C2;
+  --color-red-200: #FFD8C2;
+  --color-red-300: #FF5C34;
+  --color-red-400: #FF5C34;
+  --color-red-500: #FF5C34;
+  --color-red-600: #B03616;
+  --color-red-700: #B03616;
+  --color-red-800: #B03616;
+  --color-red-900: #B03616;
+
+  /* green → wasabi系（成功） */
+  --color-green-50: #E9F056;
+  --color-green-100: #E9F056;
+  --color-green-200: #E9F056;
+  --color-green-300: #666C14;
+  --color-green-400: #666C14;
+  --color-green-500: #666C14;
+  --color-green-600: #666C14;
+  --color-green-700: #666C14;
+  --color-green-800: #666C14;
+  --color-green-900: #666C14;
+
+  /* purple（テンプレート系アクセント） → coolblue/cassis */
+  --color-purple-50: #D7EFFF;
+  --color-purple-100: #D7EFFF;
+  --color-purple-200: #E2E1DA;
+  --color-purple-300: #9C8290;
+  --color-purple-400: #351E28;
+  --color-purple-500: #351E28;
+  --color-purple-600: #351E28;
+  --color-purple-700: #351E28;
+  --color-purple-800: #351E28;
+  --color-purple-900: #351E28;
+
+  /* amber / yellow / orange → orange系 */
+  --color-amber-50: #FFD8C2;
+  --color-amber-100: #FFD8C2;
+  --color-amber-200: #FFD8C2;
+  --color-amber-300: #FF5C34;
+  --color-amber-400: #FF5C34;
+  --color-amber-500: #FF5C34;
+  --color-amber-600: #B03616;
+  --color-amber-700: #B03616;
+  --color-amber-800: #B03616;
+  --color-amber-900: #B03616;
+  --color-orange-50: #FFD8C2;
+  --color-orange-100: #FFD8C2;
+  --color-orange-200: #FFD8C2;
+  --color-orange-300: #FF5C34;
+  --color-orange-400: #FF5C34;
+  --color-orange-500: #FF5C34;
+  --color-orange-600: #B03616;
+  --color-orange-700: #B03616;
+  --color-orange-800: #B03616;
+  --color-orange-900: #B03616;
+  --color-yellow-50: #E9F056;
+  --color-yellow-100: #E9F056;
+  --color-yellow-200: #E9F056;
+  --color-yellow-300: #E9F056;
+  --color-yellow-400: #E9F056;
+  --color-yellow-500: #666C14;
+  --color-yellow-600: #666C14;
+  --color-yellow-700: #666C14;
+  --color-yellow-800: #666C14;
+  --color-yellow-900: #666C14;
+
+  /* --- 影は使わない（F&C原則: 背景色差別化のみ） --- */
+  --shadow-2xs: 0 0 #0000;
+  --shadow-xs: 0 0 #0000;
+  --shadow-sm: 0 0 #0000;
+  --shadow: 0 0 #0000;
+  --shadow-md: 0 0 #0000;
+  --shadow-lg: 0 0 #0000;
+  --shadow-xl: 0 0 #0000;
+  --shadow-2xl: 0 0 #0000;
+
+  /* --- 角丸をF&Cスケールに --- */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;   /* 入力欄・ボタン */
+  --radius-xl: 16px;   /* カード */
+  --radius-2xl: 16px;
 }
 
 body {
   font-family: var(--font-family-sans);
-  background-color: var(--color-background-light);
+  background-color: #EFEFEA; /* fc-bg */
   color: var(--color-text-dark);
 }
 
@@ -122,7 +240,7 @@ body {
     max-height: 50vh;
     overflow-y: auto;
     border-radius: 1rem 1rem 0 0;
-    box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: none;
   }
 }
 
@@ -160,7 +278,7 @@ body {
 
 /* スケルトンローディング */
 .skeleton {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: linear-gradient(90deg, #EFEFEA 25%, #E2E1DA 50%, #EFEFEA 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s infinite;
 }

@@ -232,7 +232,7 @@ export default function TextElement({
     width: '100%',
     height: '100%',
     background: 'rgba(255, 255, 255, 0.95)',
-    border: '2px solid #3b82f6',
+    border: '2px solid #351E28',
     borderRadius: '2px',
     padding: '2px',
     resize: 'none',
