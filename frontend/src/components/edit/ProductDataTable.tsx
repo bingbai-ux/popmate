@@ -23,6 +23,9 @@ interface ProductDataTableProps {
   summarizeFlags?: boolean[];
   onToggleSummarize?: (index: number) => void;
   onToggleAllSummarize?: (enabled: boolean) => void;
+  onDuplicateProduct?: (index: number) => void;
+  onRemoveProduct?: (index: number) => void;
+  onAddBlankProduct?: () => void;
   fieldToggleState?: FieldToggleState;
   onFieldToggleChange?: Dispatch<SetStateAction<FieldToggleState>>;
   csvFieldMap?: CsvFieldMap;
@@ -41,6 +44,9 @@ export function ProductDataTable({
   summarizeFlags,
   onToggleSummarize,
   onToggleAllSummarize,
+  onDuplicateProduct,
+  onRemoveProduct,
+  onAddBlankProduct,
   fieldToggleState = {},
   onFieldToggleChange,
   csvFieldMap = {},
@@ -172,6 +178,7 @@ export function ProductDataTable({
       return value;
     }
     if (key === 'taxIncludedPrice') {
+      if (product.isBlank && !product.price) return '';
       const { price } = getTaxIncludedPriceWithCsv(product);
       return `¥${formatPriceNumber(price)}`;
     }
@@ -254,7 +261,9 @@ export function ProductDataTable({
 
   // テーブルの総幅を計算
   const summarizeColWidth = showSummarizeColumn ? 64 : 0;
-  const totalWidth = 32 + 40 + summarizeColWidth + usedColumns.reduce((sum, col) => sum + (columnWidths[col.key] || 120), 0);
+  const showActionColumn = !!onDuplicateProduct || !!onRemoveProduct;
+  const actionColWidth = showActionColumn ? 96 : 0;
+  const totalWidth = 32 + 40 + actionColWidth + summarizeColWidth + usedColumns.reduce((sum, col) => sum + (columnWidths[col.key] || 120), 0);
 
   /** ヘッダーにCSVチェックボックスを表示するか */
   const shouldShowCsvCheckbox = (colKey: string): boolean => {
@@ -271,6 +280,23 @@ export function ProductDataTable({
   };
 
   return (
+    <div>
+    {onAddBlankProduct && (
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs text-gray-500">
+          「コピー」で同じPOPを複数枚、「空欄POPを追加」で商品なしの枠を作れます
+        </p>
+        <button
+          onClick={onAddBlankProduct}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          空欄POPを追加
+        </button>
+      </div>
+    )}
     <div
       className="overflow-auto border border-gray-200 rounded-lg bg-white"
       style={{ cursor: isResizing ? 'col-resize' : 'default' }}
@@ -279,6 +305,7 @@ export function ProductDataTable({
         <colgroup>
           <col style={{ width: 32 }} />
           <col style={{ width: 40 }} />
+          {showActionColumn && <col style={{ width: actionColWidth }} />}
           {showSummarizeColumn && <col style={{ width: summarizeColWidth }} />}
           {usedColumns.map(col => (
             <col key={col.key} style={{ width: columnWidths[col.key] || 120 }} />
@@ -290,6 +317,11 @@ export function ProductDataTable({
             <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 border-b border-gray-200">
               #
             </th>
+            {showActionColumn && (
+              <th className="px-1 py-2 text-center text-xs font-medium text-gray-500 border-b border-gray-200">
+                操作
+              </th>
+            )}
             {showSummarizeColumn && (
               <th className="px-1 py-2 text-center text-xs font-medium text-gray-500 border-b border-gray-200">
                 <div className="flex flex-col items-center gap-0.5">
@@ -389,6 +421,31 @@ export function ProductDataTable({
                 <td className="px-2 py-2 text-center text-xs text-gray-400 border-b border-gray-100">
                   {index + 1}
                 </td>
+                {/* コピー・削除 */}
+                {showActionColumn && (
+                  <td className="px-1 py-2 text-center border-b border-gray-100" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-center gap-1">
+                      {onDuplicateProduct && (
+                        <button
+                          onClick={() => onDuplicateProduct(index)}
+                          className="px-1.5 py-0.5 text-[11px] text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                          title="同じPOPをもう1枚追加"
+                        >
+                          コピー
+                        </button>
+                      )}
+                      {onRemoveProduct && (
+                        <button
+                          onClick={() => onRemoveProduct(index)}
+                          className="px-1.5 py-0.5 text-[11px] text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          title="この行を削除"
+                        >
+                          削除
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                )}
                 {/* AI要約チェック */}
                 {showSummarizeColumn && (
                   <td className="px-1 py-2 text-center border-b border-gray-100">
@@ -450,7 +507,7 @@ export function ProductDataTable({
                       ) : isEditable(col.key) && onEditProduct && !fromCsv ? (
                         isExpanded ? (
                           <textarea
-                            value={col.key === 'price' ? String(product.price) : getCellValue(product, col.key)}
+                            value={col.key === 'price' ? (product.isBlank && !product.price ? '' : String(product.price)) : getCellValue(product, col.key)}
                             onChange={(e) => handleCellEdit(index, col.key, e.target.value)}
                             onClick={(e) => e.stopPropagation()}
                             className="w-full px-1 py-0.5 border border-gray-300 focus:border-blue-400 focus:outline-none rounded text-sm bg-white resize-y min-h-[60px]"
@@ -459,7 +516,7 @@ export function ProductDataTable({
                         ) : (
                           <input
                             type={col.key === 'price' ? 'number' : 'text'}
-                            value={col.key === 'price' ? product.price : getCellValue(product, col.key)}
+                            value={col.key === 'price' ? (product.isBlank && !product.price ? '' : product.price) : getCellValue(product, col.key)}
                             onChange={(e) => handleCellEdit(index, col.key, e.target.value)}
                             onClick={(e) => e.stopPropagation()}
                             className="w-full px-1 py-0.5 border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none rounded text-sm bg-transparent truncate"
@@ -485,6 +542,7 @@ export function ProductDataTable({
           })}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }

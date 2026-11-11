@@ -22,6 +22,30 @@ import { loadSelectedProducts, saveSelectedProducts, loadCsvFieldData, saveCsvFi
 import { loadEditorState } from '@/lib/editorStorage';
 import { FieldToggleState, CsvFieldMap, applyCsvOverrides } from '@/types/csvFieldToggle';
 import { replaceAllElementsWithSummarize, replaceElementPlaceholders } from '@/lib/placeholderUtils';
+import { getProductKey, setProductImage } from '@/lib/productImageStore';
+
+/** 追加行（コピー・空欄POP）用のユニークID */
+function generateRowId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** 空欄POP用の商品データ */
+function createBlankProduct(): Product {
+  return {
+    productId: generateRowId('blank'),
+    productCode: '',
+    productName: '',
+    price: 0,
+    categoryId: '',
+    categoryName: '',
+    groupCode: '',
+    description: '',
+    maker: '',
+    taxDivision: '1',
+    taxRate: 10,
+    isBlank: true,
+  };
+}
 
 function EditContent() {
   const searchParams = useSearchParams();
@@ -190,12 +214,49 @@ function EditContent() {
 
   // 商品更新（インデックスベース）
   const handleEditProduct = useCallback((index: number, field: string, value: string) => {
-    setProducts(prev => prev.map((p, i) =>
-      i === index
-        ? { ...p, [field]: field === 'price' ? Number(value) || p.price : value }
-        : p
-    ));
+    setProducts(prev => prev.map((p, i) => {
+      if (i !== index) return p;
+      if (field === 'price') {
+        // 空欄にしたら0（空欄POPでは価格欄が空で印刷される）
+        const price = value.trim() === '' ? 0 : (Number(value) || p.price);
+        return { ...p, price };
+      }
+      return { ...p, [field]: value };
+    }));
   }, []);
+
+  // 同じPOPをコピー（直後に挿入）
+  const handleDuplicateProduct = useCallback((index: number) => {
+    const source = products[index];
+    if (!source) return;
+    const copy: Product = { ...source, productId: generateRowId(`${source.productId || 'item'}_copy`) };
+    // 商品画像はメモリストアにキー単位で保存されているため、新しいキーにも複製
+    if (source.productImageUrl) {
+      setProductImage(getProductKey(copy), source.productImageUrl);
+    }
+    setProducts(prev => [...prev.slice(0, index + 1), copy, ...prev.slice(index + 1)]);
+    setSummarizeFlags(prev => [...prev.slice(0, index + 1), prev[index] ?? true, ...prev.slice(index + 1)]);
+    setCurrentProductIndex(index + 1);
+  }, [products]);
+
+  // 空欄POPを末尾に追加
+  const handleAddBlankProduct = useCallback(() => {
+    const blank = createBlankProduct();
+    setProducts(prev => [...prev, blank]);
+    setSummarizeFlags(prev => [...prev, false]);
+    setCurrentProductIndex(products.length);
+  }, [products.length]);
+
+  // 行を削除
+  const handleRemoveProduct = useCallback((index: number) => {
+    setProducts(prev => prev.filter((_, i) => i !== index));
+    setSummarizeFlags(prev => prev.filter((_, i) => i !== index));
+    setCurrentProductIndex(prev => {
+      if (prev > index) return prev - 1;
+      if (prev === index) return Math.max(0, Math.min(prev, products.length - 2));
+      return prev;
+    });
+  }, [products.length]);
 
   // AI要約トグル（個別）
   const handleToggleSummarize = useCallback((index: number) => {
@@ -319,12 +380,20 @@ function EditContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
             <p className="text-gray-500 mb-4">商品が選択されていません</p>
-            <Link
-              href={`/data-select?template=${templateId}`}
-              className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 text-sm"
-            >
-              商品を選択する
-            </Link>
+            <div className="flex items-center justify-center gap-3">
+              <Link
+                href={`/data-select?template=${templateId}`}
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 text-sm"
+              >
+                商品を選択する
+              </Link>
+              <button
+                onClick={handleAddBlankProduct}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+              >
+                空欄POPを追加
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -365,6 +434,9 @@ function EditContent() {
                 summarizeFlags={summarizeFlags}
                 onToggleSummarize={handleToggleSummarize}
                 onToggleAllSummarize={handleToggleAllSummarize}
+                onDuplicateProduct={handleDuplicateProduct}
+                onRemoveProduct={handleRemoveProduct}
+                onAddBlankProduct={handleAddBlankProduct}
                 fieldToggleState={fieldToggleState}
                 onFieldToggleChange={setFieldToggleState}
                 csvFieldMap={csvFieldMap}
@@ -390,7 +462,7 @@ function EditContent() {
 
 export default function EditPage() {
   return (
-    <main className="min-h-screen bg-background-light flex flex-col">
+    <main className="h-screen overflow-hidden bg-background-light flex flex-col">
       <Header />
       <ProgressBar currentStep={4} />
       <Suspense fallback={<div className="flex-1 flex items-center justify-center">読み込み中...</div>}>
