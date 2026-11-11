@@ -432,6 +432,16 @@ body {
     display: none !important;
   }
 
+  /* ★ ポップ内容の縮小を transform → zoom に切替（印刷時のみ）
+     transform: scale は見た目だけ縮小し、レイアウト上は2倍サイズのまま残る。
+     Chrome は改ページ判定にこの2倍サイズを使うため、最下段のポップは
+     下半分（価格など）が「用紙からはみ出た」扱いで消えていた。
+     zoom はレイアウトごと縮小するので、実寸どおり用紙内に収まる。 */
+  .pop-content {
+    transform: none !important;
+    zoom: 0.5;
+  }
+
   /* ★ 印刷ページコンテナのスタイルリセット */
   #print-pages {
     padding: 0 !important;

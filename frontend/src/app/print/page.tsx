@@ -346,7 +346,7 @@ function PrintContent() {
     const preProcessed = processedElementsMap.get(productKey);
 
     return (
-      <div style={{
+      <div className="pop-content" style={{
         width: mmToPx(templateSize.width),
         height: mmToPx(templateSize.height),
         transform: `scale(${1 / RENDER_SCALE})`,
