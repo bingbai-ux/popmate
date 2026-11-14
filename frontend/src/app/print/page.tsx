@@ -231,10 +231,10 @@ function PrintContent() {
     });
   }, [templateSize, paper, products.length]);
 
-  // 多くのプリンターは用紙下端の数mm〜十数mmを印刷できず、最下段の価格が欠けるため
-  // デフォルトで全体を上へ最大5mm寄せる（上余白は最低3mm残す）
-  const defaultOffsetY = -Math.min(5, Math.max(0, layout.marginY - 3));
-  const offsetY = offsetYInput ?? defaultOffsetY;
+  // 上下位置のデフォルトは0mm（レイアウト計算どおりの中央配置）。
+  // ※ 以前は最下段の価格欠けを「プリンターの下端余白」のせいと見て-5mmずらしていたが、
+  //    真因は transform による改ページ誤判定（globals.css の .pop-content で対処済み）。
+  const offsetY = offsetYInput ?? 0;
   const setOffsetY = (v: number) => setOffsetYInput(v);
 
   // --- ページナビゲーション ---
@@ -522,13 +522,13 @@ function PrintContent() {
   // UIレンダリング
   // ==================================================
   return (
-    <div className="min-h-screen bg-gray-100 print-root">
+    <div className="min-h-screen bg-gray-100 print-root print-reset">
 
-      <div className="max-w-7xl mx-auto px-4 py-4">
-        <div className="flex gap-4">
+      <div className="max-w-7xl mx-auto px-4 py-4 print-reset">
+        <div className="flex gap-4 print-reset">
 
           {/* === 左側: A4プレビュー === */}
-          <div className="flex-1" ref={previewContainerRef}>
+          <div className="flex-1 print-reset" ref={previewContainerRef}>
 
             {/* AI処理中インジケーター */}
             {isProcessingElements && (
@@ -921,7 +921,7 @@ function PrintContent() {
 
 export default function PrintPage() {
   return (
-    <main className="min-h-screen bg-background-light flex flex-col">
+    <main className="min-h-screen bg-background-light flex flex-col print-reset">
       <div className="no-print">
         <Header />
         <ProgressBar currentStep={5} />

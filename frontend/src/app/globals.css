@@ -398,6 +398,7 @@ body {
     margin: 0 !important;
     padding: 0 !important;
     transform: none !important;        /* ★ 縮小を解除 → 実寸 */
+    overflow: hidden !important;       /* ★ 1mmでもはみ出すと白紙ページが増えるため */
     page-break-after: always;
     page-break-inside: avoid;
     -webkit-print-color-adjust: exact !important;
@@ -430,6 +431,24 @@ body {
 
   .empty-frame span {
     display: none !important;
+  }
+
+  /* ★ 印刷時はA4ページ以外の外枠（余白・最低高さ・背景）をゼロにする
+     画面用の min-height: 100vh や上下パディングが印刷にも残ると、
+     A4 1枚分より少しだけ高くなり、2枚目に白紙ページが出てしまう */
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+  .print-reset {
+    min-height: 0 !important;
+    height: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    background: white !important;
   }
 
   /* ★ ポップ内容の縮小を transform → zoom に切替（印刷時のみ）
