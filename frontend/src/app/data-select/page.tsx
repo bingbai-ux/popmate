@@ -14,6 +14,11 @@ import { FieldToggleState, CsvFieldMap } from '@/types/csvFieldToggle';
 import { searchProducts, fetchCategoriesWithId, fetchProductFilters } from '@/lib/api';
 import { saveSelectedProducts, loadSelectedProducts, saveCsvFieldData, loadCsvFieldData } from '@/lib/selectedProductsStorage';
 
+/** スマレジ商品ID（数値文字列）の昇順で比較。数値でないIDは文字列として比較 */
+function compareByProductId(a: Product, b: Product): number {
+  return a.productId.localeCompare(b.productId, 'ja', { numeric: true });
+}
+
 function DataSelectContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -111,7 +116,9 @@ function DataSelectContent() {
         groupCodes: filters.supplierIds.length > 0 ? filters.supplierIds : undefined,
       });
 
-      setSearchResults(result.products);
+      // スマレジ商品ID順（昇順）に並べる（APIの返却順は部門順になるため）
+      const sorted = [...result.products].sort(compareByProductId);
+      setSearchResults(sorted);
       setDataSource(result.source);
       console.log(`[data-select] 検索結果: ${result.products.length}件 (${result.source})`);
     } catch (e: any) {
